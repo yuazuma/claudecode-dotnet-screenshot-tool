@@ -43,8 +43,9 @@ public class MarkdownManualWriter
             sb.AppendLine();
             for (int i = 0; i < chapters.Count; i++)
             {
-                string anchor = ToAnchor($"{i + 1}-{chapters[i].WindowTitle}");
-                sb.AppendLine($"{i + 1}. [{i + 1}. {chapters[i].WindowTitle}](#{anchor})");
+                string label = chapters[i].DisplayTitle;
+                string anchor = ToAnchor($"{i + 1}-{label}");
+                sb.AppendLine($"{i + 1}. [{i + 1}. {label}](#{anchor})");
             }
             sb.AppendLine();
         }
@@ -54,7 +55,7 @@ public class MarkdownManualWriter
         for (int ci = 0; ci < chapters.Count; ci++)
         {
             var chapter = chapters[ci];
-            sb.AppendLine($"## {ci + 1}. {chapter.WindowTitle}");
+            sb.AppendLine($"## {ci + 1}. {chapter.DisplayTitle}");
             sb.AppendLine();
 
 
@@ -125,7 +126,12 @@ public class MarkdownManualWriter
         {
             if (current == null || step.TriggerType == TriggerType.ActiveWindowChange)
             {
-                current = new ChapterGroup { WindowTitle = step.WindowTitle, TimeGapMinutes = timeGapMinutes };
+                current = new ChapterGroup
+                {
+                    WindowTitle   = step.WindowTitle,
+                    ProcessName   = step.ProcessName,
+                    TimeGapMinutes = timeGapMinutes
+                };
                 result.Add(current);
             }
             current.Steps.Add(step);
@@ -147,8 +153,14 @@ public class MarkdownManualWriter
 
     private class ChapterGroup
     {
-        public string WindowTitle { get; set; } = "";
-        public int TimeGapMinutes { get; set; } = 5;
+        public string WindowTitle  { get; set; } = "";
+        public string ProcessName  { get; set; } = "";
+        public int TimeGapMinutes  { get; set; } = 5;
         public List<ManualStep> Steps { get; } = [];
+
+        // D-02: タイトルが空の場合はプロセス名でフォールバック
+        public string DisplayTitle => string.IsNullOrWhiteSpace(WindowTitle)
+            ? (string.IsNullOrWhiteSpace(ProcessName) ? "(不明なウィンドウ)" : $"({ProcessName})")
+            : WindowTitle;
     }
 }

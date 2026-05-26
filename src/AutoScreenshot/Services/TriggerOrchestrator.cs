@@ -111,7 +111,8 @@ public class TriggerOrchestrator : IDisposable
         {
             if (_paused || IsExcludedApp()) return;
             if (!CheckCooldown(TriggerType.Keyboard, _config.Config.Triggers.CooldownKeyboard)) return;
-            FireCapture(TriggerType.Keyboard);
+            var (inputText, keyCodes) = _hook.TakeAccumulatedKeys();
+            FireCapture(TriggerType.Keyboard, keyboardInput: (inputText, keyCodes));
         }, null, (int)(idleSec * 1000), System.Threading.Timeout.Infinite);
     }
 
@@ -152,7 +153,8 @@ public class TriggerOrchestrator : IDisposable
         }
     }
 
-    private void FireCapture(TriggerType trigger, IReadOnlyList<int>? screenIndices = null)
+    private void FireCapture(TriggerType trigger, IReadOnlyList<int>? screenIndices = null,
+        (string inputText, string keyCodes)? keyboardInput = null)
     {
         Task.Run(async () =>
         {
@@ -173,7 +175,11 @@ public class TriggerOrchestrator : IDisposable
                 var now = DateTime.Now;
                 foreach (var (bmp, monitorIdx, bounds) in screenshots)
                 {
-                    var evt = new TriggerEvent(trigger, now, cursorPos, title, procName, monitorIdx);
+                    var evt = new TriggerEvent(trigger, now, cursorPos, title, procName, monitorIdx)
+                    {
+                        InputText = keyboardInput?.inputText.Length > 0 ? keyboardInput.Value.inputText : null,
+                        KeyCodes  = keyboardInput?.keyCodes.Length > 0  ? keyboardInput.Value.keyCodes  : null,
+                    };
 
                     // パスワード欄マスキング
                     if (cfg.Privacy.MaskPasswordFields)
@@ -204,7 +210,11 @@ public class TriggerOrchestrator : IDisposable
                 // 手順書にステップを記録（プライマリモニターのパスのみ）
                 if (_manualRecorder != null && firstMonitorPath != null)
                 {
-                    var stepEvt = new TriggerEvent(trigger, now, cursorPos, title, procName, 0);
+                    var stepEvt = new TriggerEvent(trigger, now, cursorPos, title, procName, 0)
+                    {
+                        InputText = keyboardInput?.inputText.Length > 0 ? keyboardInput.Value.inputText : null,
+                        KeyCodes  = keyboardInput?.keyCodes.Length > 0  ? keyboardInput.Value.keyCodes  : null,
+                    };
                     await _manualRecorder.RecordStepAsync(stepEvt, firstMonitorPath, firstMonitorBounds);
                 }
 

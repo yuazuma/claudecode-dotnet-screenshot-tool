@@ -82,6 +82,25 @@ public class ManualSessionRecorder
                 _                           => false,
             };
 
+            // E-04: KeyboardMode に基づいてキー入力テキストを設定
+            string? inputText = null;
+            string? keyCodes  = null;
+            if (evt.Type == TriggerType.Keyboard)
+            {
+                inputText = cfg.KeyboardMode switch
+                {
+                    KeyboardMode.RealText => evt.InputText,
+                    KeyboardMode.Both     => evt.InputText,
+                    _                    => null,
+                };
+                keyCodes = cfg.KeyboardMode switch
+                {
+                    KeyboardMode.KeyCode => evt.KeyCodes,
+                    KeyboardMode.Both    => evt.KeyCodes,
+                    _                   => null,
+                };
+            }
+
             var step = new ManualStep
             {
                 StepNumber     = _current.Steps.Count + 1,
@@ -94,6 +113,8 @@ public class ManualSessionRecorder
                 ProcessName    = evt.ActiveProcessName,
                 ImagePath      = includeImage ? imagePath : null,
                 NeedsReview    = needsReview,
+                InputText      = inputText,
+                KeyCodes       = keyCodes,
             };
 
             step.DescriptionRuleBased = RuleBasedDescriber.Describe(step);

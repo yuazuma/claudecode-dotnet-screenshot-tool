@@ -23,4 +23,8 @@ public record TriggerEvent(
 )
 {
     public Guid EventId { get; init; } = Guid.NewGuid();
+
+    // E-04: キーボードイベント時のみ使用
+    public string? InputText { get; init; }
+    public string? KeyCodes  { get; init; }
 }

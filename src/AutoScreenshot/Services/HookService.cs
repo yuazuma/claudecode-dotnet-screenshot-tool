@@ -27,9 +27,30 @@ public class HookService : IDisposable
     // 設定参照 (ドラッグ閾値・ホイールアイドル時間)
     private readonly Func<TriggerConfig> _triggerConfig;
 
+    // キーボード入力蓄積バッファ (E-04)
+    private readonly System.Text.StringBuilder _inputTextBuf = new();
+    private readonly System.Collections.Generic.List<string> _keyCodeBuf = [];
+    private readonly object _keyBufLock = new();
+    private bool _shiftDown;
+    private bool _ctrlDown;
+    private bool _altDown;
+
     public event EventHandler<TriggerType>? MouseEvent;
     public event EventHandler? KeyboardActivity;
     public event EventHandler? ActiveWindowChanged;
+
+    /// <summary>蓄積されたキーボード入力を取り出してバッファをクリアする。</summary>
+    public (string inputText, string keyCodes) TakeAccumulatedKeys()
+    {
+        lock (_keyBufLock)
+        {
+            string text = _inputTextBuf.ToString();
+            string codes = string.Join(", ", _keyCodeBuf);
+            _inputTextBuf.Clear();
+            _keyCodeBuf.Clear();
+            return (text, codes);
+        }
+    }
 
     public HookService(Func<TriggerConfig> triggerConfig)
     {
@@ -143,13 +164,150 @@ public class HookService : IDisposable
         if (nCode >= 0)
         {
             int msg = (int)wParam;
-            if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
+            var ks = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
+            var vk = (System.Windows.Forms.Keys)ks.vkCode;
+
+            bool isDown = msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN;
+            bool isUp   = msg == 0x0101 /* WM_KEYUP */ || msg == 0x0105 /* WM_SYSKEYUP */;
+
+            if (isDown || isUp)
+            {
+                switch (vk)
+                {
+                    case System.Windows.Forms.Keys.LShiftKey:
+                    case System.Windows.Forms.Keys.RShiftKey:
+                    case System.Windows.Forms.Keys.ShiftKey:
+                        _shiftDown = isDown; break;
+                    case System.Windows.Forms.Keys.LControlKey:
+                    case System.Windows.Forms.Keys.RControlKey:
+                    case System.Windows.Forms.Keys.ControlKey:
+                        _ctrlDown = isDown; break;
+                    case System.Windows.Forms.Keys.LMenu:
+                    case System.Windows.Forms.Keys.RMenu:
+                    case System.Windows.Forms.Keys.Menu:
+                        _altDown = isDown; break;
+                }
+            }
+
+            if (isDown)
             {
                 Log.Debug("HookService: キー入力検知");
+                AccumulateKey(vk);
                 KeyboardActivity?.Invoke(this, EventArgs.Empty);
             }
         }
         return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
+    }
+
+    private void AccumulateKey(System.Windows.Forms.Keys vk)
+    {
+        bool shift = _shiftDown;
+        bool ctrl  = _ctrlDown;
+        bool alt   = _altDown;
+
+        // モディファイアキー自体は単独で蓄積しない
+        if (vk is System.Windows.Forms.Keys.ShiftKey or System.Windows.Forms.Keys.LShiftKey
+                or System.Windows.Forms.Keys.RShiftKey
+                or System.Windows.Forms.Keys.ControlKey or System.Windows.Forms.Keys.LControlKey
+                or System.Windows.Forms.Keys.RControlKey
+                or System.Windows.Forms.Keys.Menu or System.Windows.Forms.Keys.LMenu
+                or System.Windows.Forms.Keys.RMenu
+                or System.Windows.Forms.Keys.LWin or System.Windows.Forms.Keys.RWin)
+            return;
+
+        string? printable = null;
+        string keyName;
+
+        if (!ctrl && !alt)
+        {
+            printable = VkToPrintable(vk, shift);
+        }
+
+        keyName = BuildKeyName(vk, shift, ctrl, alt);
+
+        lock (_keyBufLock)
+        {
+            if (vk == System.Windows.Forms.Keys.Back)
+            {
+                if (_inputTextBuf.Length > 0)
+                    _inputTextBuf.Remove(_inputTextBuf.Length - 1, 1);
+            }
+            else if (printable != null)
+            {
+                _inputTextBuf.Append(printable);
+            }
+            _keyCodeBuf.Add(keyName);
+        }
+    }
+
+    private static string? VkToPrintable(System.Windows.Forms.Keys vk, bool shift)
+    {
+        if (vk >= System.Windows.Forms.Keys.A && vk <= System.Windows.Forms.Keys.Z)
+            return (shift ? vk.ToString() : vk.ToString().ToLowerInvariant());
+
+        if (vk == System.Windows.Forms.Keys.Space) return " ";
+
+        var shiftMap = new System.Collections.Generic.Dictionary<System.Windows.Forms.Keys, string>
+        {
+            [System.Windows.Forms.Keys.D1] = shift ? "!" : "1",
+            [System.Windows.Forms.Keys.D2] = shift ? "@" : "2",
+            [System.Windows.Forms.Keys.D3] = shift ? "#" : "3",
+            [System.Windows.Forms.Keys.D4] = shift ? "$" : "4",
+            [System.Windows.Forms.Keys.D5] = shift ? "%" : "5",
+            [System.Windows.Forms.Keys.D6] = shift ? "^" : "6",
+            [System.Windows.Forms.Keys.D7] = shift ? "&" : "7",
+            [System.Windows.Forms.Keys.D8] = shift ? "*" : "8",
+            [System.Windows.Forms.Keys.D9] = shift ? "(" : "9",
+            [System.Windows.Forms.Keys.D0] = shift ? ")" : "0",
+            [System.Windows.Forms.Keys.OemMinus]     = shift ? "_" : "-",
+            [System.Windows.Forms.Keys.Oemplus]      = shift ? "+" : "=",
+            [System.Windows.Forms.Keys.OemOpenBrackets] = shift ? "{" : "[",
+            [System.Windows.Forms.Keys.OemCloseBrackets] = shift ? "}" : "]",
+            [System.Windows.Forms.Keys.OemBackslash] = shift ? "|" : "\\",
+            [System.Windows.Forms.Keys.OemSemicolon] = shift ? ":" : ";",
+            [System.Windows.Forms.Keys.OemQuotes]    = shift ? "\"" : "'",
+            [System.Windows.Forms.Keys.Oemcomma]     = shift ? "<" : ",",
+            [System.Windows.Forms.Keys.OemPeriod]    = shift ? ">" : ".",
+            [System.Windows.Forms.Keys.OemQuestion]  = shift ? "?" : "/",
+            [System.Windows.Forms.Keys.NumPad0]  = "0", [System.Windows.Forms.Keys.NumPad1] = "1",
+            [System.Windows.Forms.Keys.NumPad2]  = "2", [System.Windows.Forms.Keys.NumPad3] = "3",
+            [System.Windows.Forms.Keys.NumPad4]  = "4", [System.Windows.Forms.Keys.NumPad5] = "5",
+            [System.Windows.Forms.Keys.NumPad6]  = "6", [System.Windows.Forms.Keys.NumPad7] = "7",
+            [System.Windows.Forms.Keys.NumPad8]  = "8", [System.Windows.Forms.Keys.NumPad9] = "9",
+        };
+        return shiftMap.TryGetValue(vk, out var c) ? c : null;
+    }
+
+    private static string BuildKeyName(System.Windows.Forms.Keys vk, bool shift, bool ctrl, bool alt)
+    {
+        string vkStr = vk switch
+        {
+            System.Windows.Forms.Keys.Return    => "Enter",
+            System.Windows.Forms.Keys.Back      => "Backspace",
+            System.Windows.Forms.Keys.Delete    => "Delete",
+            System.Windows.Forms.Keys.Tab       => "Tab",
+            System.Windows.Forms.Keys.Escape    => "Escape",
+            System.Windows.Forms.Keys.Left      => "Left",
+            System.Windows.Forms.Keys.Right     => "Right",
+            System.Windows.Forms.Keys.Up        => "Up",
+            System.Windows.Forms.Keys.Down      => "Down",
+            System.Windows.Forms.Keys.Home      => "Home",
+            System.Windows.Forms.Keys.End       => "End",
+            System.Windows.Forms.Keys.Prior     => "PageUp",
+            System.Windows.Forms.Keys.Next      => "PageDown",
+            System.Windows.Forms.Keys.Space     => "Space",
+            _ when vk >= System.Windows.Forms.Keys.F1 && vk <= System.Windows.Forms.Keys.F24
+                => vk.ToString(),
+            _ when vk >= System.Windows.Forms.Keys.A && vk <= System.Windows.Forms.Keys.Z
+                => vk.ToString(),
+            _ => vk.ToString(),
+        };
+
+        var prefix = new System.Text.StringBuilder();
+        if (ctrl)  prefix.Append("Ctrl+");
+        if (alt)   prefix.Append("Alt+");
+        if (shift) prefix.Append("Shift+");
+        return prefix.ToString() + vkStr;
     }
 
     private void WinEventCallback(IntPtr hWinEventHook, uint eventType,
