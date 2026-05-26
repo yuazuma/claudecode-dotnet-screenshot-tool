@@ -203,6 +203,56 @@
                 </StackPanel>
             </TabItem>
 
+            <!-- 手順書生成 -->
+            <TabItem Header="手順書生成">
+                <ScrollViewer>
+                    <StackPanel Margin="10" VerticalAlignment="Top">
+                        <CheckBox x:Name="ChkManualEnabled" Content="操作手順書の自動生成を有効にする" Margin="0,5"/>
+
+                        <TextBlock Text="出力先フォルダ:" Margin="0,10,0,2"/>
+                        <TextBlock Text="空欄の場合: {スクリーンショット保存フォルダ}/manuals/"
+                                   FontSize="10" Foreground="Gray" Margin="0,0,0,2"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="参照..." Width="60" Margin="5,0,0,0"
+                                    Click="BtnBrowseManualFolder_Click"/>
+                            <TextBox x:Name="TxtManualOutputFolder"/>
+                        </DockPanel>
+
+                        <TextBlock Text="スクリーンショット添付:" FontWeight="Bold" Margin="0,12,0,3"/>
+                        <ComboBox x:Name="CmbScreenshotMode" Width="220" HorizontalAlignment="Left">
+                            <ComboBoxItem Content="全ステップに添付 (All)"/>
+                            <ComboBoxItem Content="ウィンドウ切替時のみ (WindowChange)"/>
+                            <ComboBoxItem Content="添付しない (None)"/>
+                        </ComboBox>
+
+                        <TextBlock Text="キーボード入力の記録方式:" FontWeight="Bold" Margin="0,12,0,3"/>
+                        <ComboBox x:Name="CmbKeyboardMode" Width="220" HorizontalAlignment="Left">
+                            <ComboBoxItem Content="実文字列のみ (RealText)"/>
+                            <ComboBoxItem Content="キーコードのみ (KeyCode)"/>
+                            <ComboBoxItem Content="両方 (Both)"/>
+                        </ComboBox>
+
+                        <TextBlock Text="章の時間区切り:" FontWeight="Bold" Margin="0,12,0,3"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="SldrChapterTimeGap" Minimum="1" Maximum="30" Width="150"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrChapterTimeGap, Path=Value, StringFormat='{}{0}分'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <TextBlock Text="同一ウィンドウ内でこの時間以上経過すると小見出しを挿入します。"
+                                   FontSize="10" Foreground="Gray" Margin="0,2,0,0"/>
+
+                        <CheckBox x:Name="ChkManualShowTitleDialog"
+                                  Content="セッション開始時にタイトル入力ダイアログを表示する"
+                                  Margin="0,12,0,0"/>
+
+                        <TextBlock Text="出力形式:" FontWeight="Bold" Margin="0,12,0,3"/>
+                        <CheckBox x:Name="ChkOutputMarkdown" Content="Markdown (.md)" Margin="0,3"/>
+                        <CheckBox x:Name="ChkOutputDocx"     Content="Word (.docx)  ※フェーズ3で実装予定" Margin="0,3" IsEnabled="False"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
 
         <!-- ボタン行 -->

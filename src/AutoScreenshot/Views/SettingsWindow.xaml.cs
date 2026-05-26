@@ -78,6 +78,16 @@ public partial class SettingsWindow : Window
         ChkFlash.IsChecked   = cfg.Notification.IconFlash;
         ChkToast.IsChecked   = cfg.Notification.Toast;
         ChkCounter.IsChecked = cfg.Notification.ShowCounter;
+
+        // 手順書生成
+        ChkManualEnabled.IsChecked        = cfg.ManualGen.Enabled;
+        TxtManualOutputFolder.Text        = cfg.ManualGen.OutputFolder;
+        CmbScreenshotMode.SelectedIndex   = (int)cfg.ManualGen.ScreenshotMode;
+        CmbKeyboardMode.SelectedIndex     = (int)cfg.ManualGen.KeyboardMode;
+        SldrChapterTimeGap.Value          = cfg.ManualGen.ChapterTimeGapMinutes;
+        ChkManualShowTitleDialog.IsChecked = cfg.ManualGen.ShowTitleDialogOnStart;
+        ChkOutputMarkdown.IsChecked       = cfg.ManualGen.OutputMarkdown;
+        ChkOutputDocx.IsChecked           = cfg.ManualGen.OutputDocx;
     }
 
     private void ApplySettings()
@@ -134,6 +144,15 @@ public partial class SettingsWindow : Window
             cfg.Notification.IconFlash   = ChkFlash.IsChecked == true;
             cfg.Notification.Toast       = ChkToast.IsChecked == true;
             cfg.Notification.ShowCounter = ChkCounter.IsChecked == true;
+
+            cfg.ManualGen.Enabled               = ChkManualEnabled.IsChecked == true;
+            cfg.ManualGen.OutputFolder          = TxtManualOutputFolder.Text.Trim();
+            cfg.ManualGen.ScreenshotMode        = (AutoScreenshot.Models.ScreenshotMode)CmbScreenshotMode.SelectedIndex;
+            cfg.ManualGen.KeyboardMode          = (AutoScreenshot.Models.KeyboardMode)CmbKeyboardMode.SelectedIndex;
+            cfg.ManualGen.ChapterTimeGapMinutes = (int)SldrChapterTimeGap.Value;
+            cfg.ManualGen.ShowTitleDialogOnStart = ChkManualShowTitleDialog.IsChecked == true;
+            cfg.ManualGen.OutputMarkdown        = ChkOutputMarkdown.IsChecked == true;
+            cfg.ManualGen.OutputDocx            = ChkOutputDocx.IsChecked == true;
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 
@@ -225,5 +244,16 @@ public partial class SettingsWindow : Window
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             TxtSaveFolder.Text = dialog.SelectedPath;
+    }
+
+    private void BtnBrowseManualFolder_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            SelectedPath = TxtManualOutputFolder.Text,
+            Description = "手順書の出力先フォルダを選択してください"
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            TxtManualOutputFolder.Text = dialog.SelectedPath;
     }
 }

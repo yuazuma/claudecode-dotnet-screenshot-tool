@@ -1,0 +1,117 @@
+using System.Text;
+using AutoScreenshot.Models;
+using Serilog;
+
+namespace AutoScreenshot.Services;
+
+/// <summary>ManualSession を Markdown ファイルに書き出す</summary>
+public class MarkdownManualWriter
+{
+    public async Task WriteAsync(ManualSession session, string outputPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        string outputDir = Path.GetDirectoryName(outputPath)!;
+
+        var sb = new StringBuilder();
+
+        // 表紙
+        sb.AppendLine($"# {session.Title}");
+        sb.AppendLine();
+        sb.AppendLine($"- **開始日時**: {session.StartedAt:yyyy-MM-dd HH:mm:ss}");
+        if (session.EndedAt.HasValue)
+            sb.AppendLine($"- **終了日時**: {session.EndedAt:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"- **OS / ユーザー**: {session.OsInfo}");
+        sb.AppendLine($"- **作成ツール**: AutoScreenshot v1.0");
+        sb.AppendLine($"- **セッションID**: {session.SessionId:N}");
+        sb.AppendLine();
+
+        // 目次（チャプター一覧）
+        var chapters = BuildChapters(session.Steps);
+        if (chapters.Count > 0)
+        {
+            sb.AppendLine("## 目次");
+            sb.AppendLine();
+            for (int i = 0; i < chapters.Count; i++)
+            {
+                string anchor = ToAnchor($"{i + 1}-{chapters[i].WindowTitle}");
+                sb.AppendLine($"{i + 1}. [{i + 1}. {chapters[i].WindowTitle}](#{anchor})");
+            }
+            sb.AppendLine();
+        }
+
+        // 本文
+        int globalStep = 0;
+        for (int ci = 0; ci < chapters.Count; ci++)
+        {
+            var chapter = chapters[ci];
+            sb.AppendLine($"## {ci + 1}. {chapter.WindowTitle}");
+            sb.AppendLine();
+
+            DateTime? lastStepTime = null;
+            foreach (var step in chapter.Steps)
+            {
+                // 時間ギャップで小見出し
+                if (lastStepTime.HasValue &&
+                    (step.Timestamp - lastStepTime.Value).TotalMinutes >= chapter.TimeGapMinutes)
+                {
+                    sb.AppendLine($"### {step.Timestamp:HH:mm}〜");
+                    sb.AppendLine();
+                }
+                lastStepTime = step.Timestamp;
+
+                globalStep++;
+                string desc = step.DescriptionLlm ?? step.DescriptionRuleBased;
+                string reviewMark = step.NeedsReview ? " <!-- TODO: UI名を確認してください -->" : "";
+                sb.AppendLine($"{globalStep}. {desc}{reviewMark}");
+
+                if (!string.IsNullOrEmpty(step.ImagePath) && File.Exists(step.ImagePath))
+                {
+                    string rel = Path.GetRelativePath(outputDir, step.ImagePath)
+                                     .Replace('\\', '/');
+                    sb.AppendLine();
+                    sb.AppendLine($"   ![ステップ {globalStep}]({rel})");
+                }
+                sb.AppendLine();
+            }
+        }
+
+        await File.WriteAllTextAsync(outputPath, sb.ToString(), Encoding.UTF8);
+        Log.Information("手順書 Markdown 出力完了: {Path}", outputPath);
+    }
+
+    private static List<ChapterGroup> BuildChapters(List<ManualStep> steps)
+    {
+        var result = new List<ChapterGroup>();
+        ChapterGroup? current = null;
+
+        foreach (var step in steps)
+        {
+            if (current == null || step.TriggerType == TriggerType.ActiveWindowChange)
+            {
+                current = new ChapterGroup { WindowTitle = step.WindowTitle };
+                result.Add(current);
+            }
+            current.Steps.Add(step);
+        }
+        return result;
+    }
+
+    private static string ToAnchor(string heading)
+    {
+        // GitHub Markdown アンカー生成（簡易）
+        var sb = new StringBuilder();
+        foreach (char c in heading.ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c) || c == '-') sb.Append(c);
+            else if (c == ' ') sb.Append('-');
+        }
+        return sb.ToString();
+    }
+
+    private class ChapterGroup
+    {
+        public string WindowTitle { get; set; } = "";
+        public int TimeGapMinutes { get; set; } = 5;
+        public List<ManualStep> Steps { get; } = [];
+    }
+}

@@ -17,6 +17,7 @@ public class TriggerOrchestrator : IDisposable
     private readonly MetadataLogger _logger;
     private readonly Notifier _notifier;
     private readonly MaskingService _masking;
+    private readonly ManualSessionRecorder? _manualRecorder;
 
     private bool _paused;
     private readonly Dictionary<TriggerType, DateTime> _lastCapture = [];
@@ -29,7 +30,8 @@ public class TriggerOrchestrator : IDisposable
     public TriggerOrchestrator(
         ConfigStore config, HookService hook, CaptureService capture,
         FileStorage storage, DiffDetector diffDetector,
-        MetadataLogger logger, Notifier notifier, MaskingService masking)
+        MetadataLogger logger, Notifier notifier, MaskingService masking,
+        ManualSessionRecorder? manualRecorder = null)
     {
         _config = config;
         _hook = hook;
@@ -39,6 +41,7 @@ public class TriggerOrchestrator : IDisposable
         _logger = logger;
         _notifier = notifier;
         _masking = masking;
+        _manualRecorder = manualRecorder;
 
         _hook.MouseEvent += OnMouseEvent;
         _hook.KeyboardActivity += OnKeyboardActivity;
@@ -165,9 +168,11 @@ public class TriggerOrchestrator : IDisposable
                     : _capture.CaptureAllScreens();
                 var cfg = _config.Config;
 
+                string? firstMonitorPath = null;
+                var now = DateTime.Now;
                 foreach (var (bmp, monitorIdx, bounds) in screenshots)
                 {
-                    var evt = new TriggerEvent(trigger, DateTime.Now, cursorPos, title, procName, monitorIdx);
+                    var evt = new TriggerEvent(trigger, now, cursorPos, title, procName, monitorIdx);
 
                     // パスワード欄マスキング
                     if (cfg.Privacy.MaskPasswordFields)
@@ -187,6 +192,15 @@ public class TriggerOrchestrator : IDisposable
 
                     if (cfg.Metadata.SidecarTextLog)
                         await _logger.LogEventAsync(evt, path);
+
+                    firstMonitorPath ??= path;
+                }
+
+                // 手順書にステップを記録（プライマリモニターのパスのみ）
+                if (_manualRecorder != null && firstMonitorPath != null)
+                {
+                    var stepEvt = new TriggerEvent(trigger, now, cursorPos, title, procName, 0);
+                    _manualRecorder.RecordStep(stepEvt, firstMonitorPath);
                 }
 
                 _notifier.OnCaptured();

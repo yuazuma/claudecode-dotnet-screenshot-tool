@@ -21,6 +21,9 @@ public class AppConfig
 
     // --- 通知 ---
     public NotificationConfig Notification { get; set; } = new();
+
+    // --- 手順書生成 ---
+    public ManualGenConfig ManualGen { get; set; } = new();
 }
 
 public class TriggerConfig

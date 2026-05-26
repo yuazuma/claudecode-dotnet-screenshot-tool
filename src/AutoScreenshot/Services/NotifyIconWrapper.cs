@@ -22,6 +22,7 @@ public class NotifyIconWrapper : IDisposable
     private readonly Notifier _notifier;
     private readonly MaskingService _masking;
     private readonly HotkeyService _hotkeyService;
+    private readonly ManualSessionRecorder _manualRecorder;
     private readonly TriggerOrchestrator _orchestrator;
 
     private bool _paused;
@@ -41,8 +42,10 @@ public class NotifyIconWrapper : IDisposable
         _masking = new MaskingService();
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
+        _manualRecorder = new ManualSessionRecorder(_config);
         _orchestrator = new TriggerOrchestrator(
-            _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking);
+            _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
+            _manualRecorder);
     }
 
     public void Initialize()
@@ -62,6 +65,10 @@ public class NotifyIconWrapper : IDisposable
         _storage.SetNotifier(_notifier);
         _storage.OnLowDiskSpaceDetected = OnLowDiskSpace;
         _hook.Start();
+
+        // 手順書セッション開始 (S-01)
+        if (_config.Config.ManualGen.Enabled)
+            _manualRecorder.StartSession();
 
         // グローバルホットキー登録
         _hotkeyService.Register(_config.Config.HotkeyPause);
@@ -127,6 +134,12 @@ public class NotifyIconWrapper : IDisposable
             }
         };
 
+        var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
+        sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession();
+
+        var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
+        generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
+
         var versionItem = new ToolStripMenuItem("バージョン情報");
         versionItem.Click += (_, _) =>
             System.Windows.MessageBox.Show(
@@ -141,6 +154,7 @@ public class NotifyIconWrapper : IDisposable
         menu.Items.AddRange([
             _pauseItem, openFolderItem, new ToolStripSeparator(),
             settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
+            sessionSplitItem, generateNowItem, new ToolStripSeparator(),
             versionItem, new ToolStripSeparator(),
             exitItem
         ]);
@@ -192,6 +206,10 @@ public class NotifyIconWrapper : IDisposable
         _hotkeyService.Dispose();
         _orchestrator.Dispose();
         _diffDetector.Dispose();
+
+        // 手順書セッション終了 (S-02) — 同期的に待機
+        _manualRecorder.StopSessionAsync().GetAwaiter().GetResult();
+
         _notifyIcon?.Dispose();
         _normalIcon?.Dispose();
         _pausedIcon?.Dispose();
