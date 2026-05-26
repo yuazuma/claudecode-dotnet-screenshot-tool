@@ -11,14 +11,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>AutoScreenshot</AssemblyName>
     <RootNamespace>AutoScreenshot</RootNamespace>
+    <Version>1.0.0</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
-    <!-- 配布設定 (Phase 7 で有効化) -->
-    <!--
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    -->
+    <Product>AutoScreenshot</Product>
+    <Company>AutoScreenshot</Company>
+    <Description>業務作業証跡の自動スクリーンショット撮影ツール</Description>
+    <Copyright>Copyright © 2026</Copyright>
+    <NeutralLanguage>ja-JP</NeutralLanguage>
   </PropertyGroup>
 
   <ItemGroup>

@@ -26,9 +26,8 @@ artifacts/
 *.pidb
 *.booproj
 
-# 発行成果物
+# 発行成果物 (出力バイナリ)
 publish/
-PublishProfiles/
 
 # OS 生成ファイル
 Thumbs.db
