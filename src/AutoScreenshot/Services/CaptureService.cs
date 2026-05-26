@@ -3,6 +3,9 @@ using System.Drawing.Imaging;
 using System.Windows.Forms;
 using AutoScreenshot.Models;
 using Serilog;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.PixelFormats;
+using ISImage = SixLabors.ImageSharp.Image;
 
 namespace AutoScreenshot.Services;
 
@@ -80,11 +83,14 @@ public class CaptureService
                 break;
 
             case Models.ImageFormat.WebP:
-                // WebP は別途ライブラリが必要 (Phase 4 で対応)
-                // 暫定的に PNG で保存
-                Log.Warning("WebP は未対応のため PNG で保存します");
-                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+            {
+                using var pngBuf = new System.IO.MemoryStream();
+                bmp.Save(pngBuf, System.Drawing.Imaging.ImageFormat.Png);
+                pngBuf.Position = 0;
+                using var img = ISImage.Load<Rgba32>(pngBuf);
+                img.Save(ms, new WebpEncoder { Quality = jpegQuality });
                 break;
+            }
 
             default: // PNG
                 bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
@@ -96,4 +102,18 @@ public class CaptureService
 
     private static ImageCodecInfo? GetCodecInfo(string mimeType) =>
         ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.MimeType == mimeType);
+
+    /// <summary>画像の左下にタイムスタンプを焼き込む</summary>
+    public void BurnTimestamp(Bitmap bmp, DateTime timestamp)
+    {
+        using var g = Graphics.FromImage(bmp);
+        using var font = new Font("Consolas", 10, FontStyle.Regular);
+        string text = timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+        var size = g.MeasureString(text, font);
+        float x = 8f;
+        float y = bmp.Height - size.Height - 8f;
+        using var bg = new SolidBrush(Color.FromArgb(160, 0, 0, 0));
+        g.FillRectangle(bg, x - 2, y - 2, size.Width + 4, size.Height + 4);
+        g.DrawString(text, font, Brushes.White, x, y);
+    }
 }

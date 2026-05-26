@@ -16,6 +16,7 @@ public class TriggerOrchestrator : IDisposable
     private readonly DiffDetector _diffDetector;
     private readonly MetadataLogger _logger;
     private readonly Notifier _notifier;
+    private readonly MaskingService _masking;
 
     private bool _paused;
     private readonly Dictionary<TriggerType, DateTime> _lastCapture = [];
@@ -28,7 +29,7 @@ public class TriggerOrchestrator : IDisposable
     public TriggerOrchestrator(
         ConfigStore config, HookService hook, CaptureService capture,
         FileStorage storage, DiffDetector diffDetector,
-        MetadataLogger logger, Notifier notifier)
+        MetadataLogger logger, Notifier notifier, MaskingService masking)
     {
         _config = config;
         _hook = hook;
@@ -37,6 +38,7 @@ public class TriggerOrchestrator : IDisposable
         _diffDetector = diffDetector;
         _logger = logger;
         _notifier = notifier;
+        _masking = masking;
 
         _hook.MouseEvent += OnMouseEvent;
         _hook.KeyboardActivity += OnKeyboardActivity;
@@ -163,9 +165,18 @@ public class TriggerOrchestrator : IDisposable
                     : _capture.CaptureAllScreens();
                 var cfg = _config.Config;
 
-                foreach (var (bmp, monitorIdx, _) in screenshots)
+                foreach (var (bmp, monitorIdx, bounds) in screenshots)
                 {
                     var evt = new TriggerEvent(trigger, DateTime.Now, cursorPos, title, procName, monitorIdx);
+
+                    // パスワード欄マスキング
+                    if (cfg.Privacy.MaskPasswordFields)
+                        _masking.ApplyMasking(bmp, bounds);
+
+                    // タイムスタンプ焼き込み
+                    if (cfg.Metadata.BurnTimestamp)
+                        _capture.BurnTimestamp(bmp, evt.Timestamp);
+
                     byte[] data = _capture.Encode(bmp, cfg.Storage.ImageFormat, cfg.Storage.JpegQuality);
                     string path = await _storage.SaveAsync(data, cfg.Storage.ImageFormat, evt);
                     bmp.Dispose();

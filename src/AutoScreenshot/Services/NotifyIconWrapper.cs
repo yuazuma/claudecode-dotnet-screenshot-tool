@@ -20,6 +20,7 @@ public class NotifyIconWrapper : IDisposable
     private readonly FileStorage _storage;
     private readonly MetadataLogger _metadataLogger;
     private readonly Notifier _notifier;
+    private readonly MaskingService _masking;
     private readonly TriggerOrchestrator _orchestrator;
 
     private bool _paused;
@@ -36,8 +37,9 @@ public class NotifyIconWrapper : IDisposable
         _storage = new FileStorage(_config);
         _metadataLogger = new MetadataLogger(_config);
         _notifier = new Notifier(_config);
+        _masking = new MaskingService();
         _orchestrator = new TriggerOrchestrator(
-            _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier);
+            _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking);
     }
 
     public void Initialize()

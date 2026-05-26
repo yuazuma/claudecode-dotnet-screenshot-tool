@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Forms;
 using AutoScreenshot.Models;
 using AutoScreenshot.Services;
+using AutoStartService = AutoScreenshot.Services.AutoStartService;
 
 namespace AutoScreenshot.Views;
 
@@ -27,6 +28,7 @@ public partial class SettingsWindow : Window
         ChkMouseLeft.IsChecked   = cfg.Triggers.MouseLeftClick;
         ChkMouseRight.IsChecked  = cfg.Triggers.MouseRightClick;
         ChkMouseMiddle.IsChecked = cfg.Triggers.MouseMiddleClick;
+        ChkMouseDrag.IsChecked   = cfg.Triggers.MouseDragDrop;
         ChkMouseWheel.IsChecked  = cfg.Triggers.MouseWheel;
         ChkKeyboard.IsChecked    = cfg.Triggers.Keyboard;
         ChkActiveWindow.IsChecked = cfg.Triggers.ActiveWindowChange;
@@ -43,6 +45,10 @@ public partial class SettingsWindow : Window
         RdoWebP.IsChecked = cfg.Storage.ImageFormat == ImageFormat.WebP;
         CmbNaming.SelectedIndex = (int)cfg.Storage.FolderNaming;
 
+        // メタデータ
+        ChkSidecarLog.IsChecked    = cfg.Metadata.SidecarTextLog;
+        ChkBurnTimestamp.IsChecked = cfg.Metadata.BurnTimestamp;
+
         // プライバシー
         ChkMaskPassword.IsChecked = cfg.Privacy.MaskPasswordFields;
         TxtExcludeApps.Text = string.Join(Environment.NewLine, cfg.Privacy.ExcludeApps);
@@ -55,13 +61,15 @@ public partial class SettingsWindow : Window
 
     private void ApplySettings()
     {
+        bool autoStart = ChkAutoStart.IsChecked == true;
         _config.Update(cfg =>
         {
-            cfg.AutoStart = ChkAutoStart.IsChecked == true;
+            cfg.AutoStart = autoStart;
 
             cfg.Triggers.MouseLeftClick   = ChkMouseLeft.IsChecked == true;
             cfg.Triggers.MouseRightClick  = ChkMouseRight.IsChecked == true;
             cfg.Triggers.MouseMiddleClick = ChkMouseMiddle.IsChecked == true;
+            cfg.Triggers.MouseDragDrop    = ChkMouseDrag.IsChecked == true;
             cfg.Triggers.MouseWheel       = ChkMouseWheel.IsChecked == true;
             cfg.Triggers.Keyboard         = ChkKeyboard.IsChecked == true;
             cfg.Triggers.ActiveWindowChange = ChkActiveWindow.IsChecked == true;
@@ -77,6 +85,9 @@ public partial class SettingsWindow : Window
                                      : ImageFormat.Png;
             cfg.Storage.FolderNaming = (FolderNamingRule)CmbNaming.SelectedIndex;
 
+            cfg.Metadata.SidecarTextLog = ChkSidecarLog.IsChecked == true;
+            cfg.Metadata.BurnTimestamp  = ChkBurnTimestamp.IsChecked == true;
+
             cfg.Privacy.MaskPasswordFields = ChkMaskPassword.IsChecked == true;
             cfg.Privacy.ExcludeApps = TxtExcludeApps.Text
                 .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
@@ -86,6 +97,12 @@ public partial class SettingsWindow : Window
             cfg.Notification.Toast       = ChkToast.IsChecked == true;
             cfg.Notification.ShowCounter = ChkCounter.IsChecked == true;
         });
+
+        // 自動起動レジストリを設定と同期
+        if (autoStart && !AutoStartService.IsEnabled())
+            AutoStartService.Enable();
+        else if (!autoStart && AutoStartService.IsEnabled())
+            AutoStartService.Disable();
     }
 
     private void BtnOk_Click(object sender, RoutedEventArgs e)

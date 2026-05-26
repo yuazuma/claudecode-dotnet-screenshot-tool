@@ -100,6 +100,16 @@
                 </StackPanel>
             </TabItem>
 
+            <!-- メタデータ -->
+            <TabItem Header="メタデータ">
+                <StackPanel Margin="10" VerticalAlignment="Top">
+                    <TextBlock Text="サイドカーログ:" FontWeight="Bold" Margin="0,5,0,5"/>
+                    <CheckBox x:Name="ChkSidecarLog" Content="撮影ごとにテキストログ (.log) を生成する" Margin="0,3"/>
+                    <TextBlock Text="画像への情報付与:" FontWeight="Bold" Margin="0,15,0,5"/>
+                    <CheckBox x:Name="ChkBurnTimestamp" Content="撮影日時を画像に焼き込む" Margin="0,3"/>
+                </StackPanel>
+            </TabItem>
+
             <!-- 通知 -->
             <TabItem Header="通知">
                 <StackPanel Margin="10" VerticalAlignment="Top">
