@@ -17,8 +17,16 @@
                 <StackPanel Margin="10" VerticalAlignment="Top">
                     <CheckBox x:Name="ChkAutoStart" Content="Windows ログオン時に自動起動する" Margin="0,5"/>
                     <TextBlock Text="ホットキー (一時停止/再開):" Margin="0,10,0,2"/>
-                    <TextBox x:Name="TxtHotkey" Width="150" HorizontalAlignment="Left" IsReadOnly="True"
-                             ToolTip="クリックしてキーを押してください"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox x:Name="TxtHotkey" Width="160" IsReadOnly="True"
+                                 ToolTip="クリックしてからキーを押してください (例: Ctrl+F9)"
+                                 PreviewKeyDown="TxtHotkey_PreviewKeyDown"
+                                 GotFocus="TxtHotkey_GotFocus"
+                                 LostFocus="TxtHotkey_LostFocus"/>
+                        <Button Content="クリア" Width="55" Margin="5,0,0,0" Click="BtnClearHotkey_Click"/>
+                    </StackPanel>
+                    <TextBlock Text="例: Ctrl+F9 / Alt+F12 / Ctrl+Shift+F10" Margin="0,2,0,0"
+                               FontSize="10" Foreground="Gray"/>
                 </StackPanel>
             </TabItem>
 

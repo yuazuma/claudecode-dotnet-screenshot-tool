@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Forms;
+using System.Windows.Input;
 using AutoScreenshot.Models;
 using AutoScreenshot.Services;
 using AutoStartService = AutoScreenshot.Services.AutoStartService;
@@ -9,6 +10,7 @@ namespace AutoScreenshot.Views;
 public partial class SettingsWindow : Window
 {
     private readonly ConfigStore _config;
+    private string? _pendingHotkey;
 
     public SettingsWindow(ConfigStore config)
     {
@@ -22,17 +24,18 @@ public partial class SettingsWindow : Window
         var cfg = _config.Config;
 
         ChkAutoStart.IsChecked = cfg.AutoStart;
+        _pendingHotkey = cfg.HotkeyPause;
         TxtHotkey.Text = cfg.HotkeyPause ?? "(未設定)";
 
         // トリガー
-        ChkMouseLeft.IsChecked   = cfg.Triggers.MouseLeftClick;
-        ChkMouseRight.IsChecked  = cfg.Triggers.MouseRightClick;
-        ChkMouseMiddle.IsChecked = cfg.Triggers.MouseMiddleClick;
-        ChkMouseDrag.IsChecked   = cfg.Triggers.MouseDragDrop;
-        ChkMouseWheel.IsChecked  = cfg.Triggers.MouseWheel;
-        ChkKeyboard.IsChecked    = cfg.Triggers.Keyboard;
+        ChkMouseLeft.IsChecked    = cfg.Triggers.MouseLeftClick;
+        ChkMouseRight.IsChecked   = cfg.Triggers.MouseRightClick;
+        ChkMouseMiddle.IsChecked  = cfg.Triggers.MouseMiddleClick;
+        ChkMouseDrag.IsChecked    = cfg.Triggers.MouseDragDrop;
+        ChkMouseWheel.IsChecked   = cfg.Triggers.MouseWheel;
+        ChkKeyboard.IsChecked     = cfg.Triggers.Keyboard;
         ChkActiveWindow.IsChecked = cfg.Triggers.ActiveWindowChange;
-        ChkScreenDiff.IsChecked  = cfg.Triggers.ScreenDiff;
+        ChkScreenDiff.IsChecked   = cfg.Triggers.ScreenDiff;
 
         SldrKeyboardIdle.Value  = cfg.Triggers.KeyboardIdleSeconds;
         SldrDiffInterval.Value  = cfg.Triggers.ScreenDiffIntervalSeconds;
@@ -40,9 +43,9 @@ public partial class SettingsWindow : Window
 
         // 保存
         TxtSaveFolder.Text = cfg.Storage.SaveFolder;
-        RdoPng.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.Png;
-        RdoJpeg.IsChecked = cfg.Storage.ImageFormat == ImageFormat.Jpeg;
-        RdoWebP.IsChecked = cfg.Storage.ImageFormat == ImageFormat.WebP;
+        RdoPng.IsChecked   = cfg.Storage.ImageFormat == ImageFormat.Png;
+        RdoJpeg.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.Jpeg;
+        RdoWebP.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.WebP;
         CmbNaming.SelectedIndex = (int)cfg.Storage.FolderNaming;
 
         // メタデータ
@@ -62,27 +65,30 @@ public partial class SettingsWindow : Window
     private void ApplySettings()
     {
         bool autoStart = ChkAutoStart.IsChecked == true;
+        string? hotkey = string.IsNullOrWhiteSpace(_pendingHotkey) ? null : _pendingHotkey;
+
         _config.Update(cfg =>
         {
-            cfg.AutoStart = autoStart;
+            cfg.AutoStart    = autoStart;
+            cfg.HotkeyPause  = hotkey;
 
-            cfg.Triggers.MouseLeftClick   = ChkMouseLeft.IsChecked == true;
-            cfg.Triggers.MouseRightClick  = ChkMouseRight.IsChecked == true;
-            cfg.Triggers.MouseMiddleClick = ChkMouseMiddle.IsChecked == true;
-            cfg.Triggers.MouseDragDrop    = ChkMouseDrag.IsChecked == true;
-            cfg.Triggers.MouseWheel       = ChkMouseWheel.IsChecked == true;
-            cfg.Triggers.Keyboard         = ChkKeyboard.IsChecked == true;
+            cfg.Triggers.MouseLeftClick     = ChkMouseLeft.IsChecked == true;
+            cfg.Triggers.MouseRightClick    = ChkMouseRight.IsChecked == true;
+            cfg.Triggers.MouseMiddleClick   = ChkMouseMiddle.IsChecked == true;
+            cfg.Triggers.MouseDragDrop      = ChkMouseDrag.IsChecked == true;
+            cfg.Triggers.MouseWheel         = ChkMouseWheel.IsChecked == true;
+            cfg.Triggers.Keyboard           = ChkKeyboard.IsChecked == true;
             cfg.Triggers.ActiveWindowChange = ChkActiveWindow.IsChecked == true;
-            cfg.Triggers.ScreenDiff       = ChkScreenDiff.IsChecked == true;
+            cfg.Triggers.ScreenDiff         = ChkScreenDiff.IsChecked == true;
 
-            cfg.Triggers.KeyboardIdleSeconds          = SldrKeyboardIdle.Value;
-            cfg.Triggers.ScreenDiffIntervalSeconds    = (int)SldrDiffInterval.Value;
-            cfg.Triggers.ScreenDiffThresholdPercent   = SldrDiffThreshold.Value;
+            cfg.Triggers.KeyboardIdleSeconds        = SldrKeyboardIdle.Value;
+            cfg.Triggers.ScreenDiffIntervalSeconds  = (int)SldrDiffInterval.Value;
+            cfg.Triggers.ScreenDiffThresholdPercent = SldrDiffThreshold.Value;
 
-            cfg.Storage.SaveFolder   = TxtSaveFolder.Text;
-            cfg.Storage.ImageFormat  = RdoJpeg.IsChecked == true ? ImageFormat.Jpeg
-                                     : RdoWebP.IsChecked == true ? ImageFormat.WebP
-                                     : ImageFormat.Png;
+            cfg.Storage.SaveFolder  = TxtSaveFolder.Text;
+            cfg.Storage.ImageFormat = RdoJpeg.IsChecked == true ? ImageFormat.Jpeg
+                                    : RdoWebP.IsChecked == true ? ImageFormat.WebP
+                                    : ImageFormat.Png;
             cfg.Storage.FolderNaming = (FolderNamingRule)CmbNaming.SelectedIndex;
 
             cfg.Metadata.SidecarTextLog = ChkSidecarLog.IsChecked == true;
@@ -97,6 +103,7 @@ public partial class SettingsWindow : Window
             cfg.Notification.Toast       = ChkToast.IsChecked == true;
             cfg.Notification.ShowCounter = ChkCounter.IsChecked == true;
         });
+        // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 
         // 自動起動レジストリを設定と同期
         if (autoStart && !AutoStartService.IsEnabled())
@@ -104,6 +111,53 @@ public partial class SettingsWindow : Window
         else if (!autoStart && AutoStartService.IsEnabled())
             AutoStartService.Disable();
     }
+
+    // --- ホットキー入力処理 ---
+
+    private void TxtHotkey_GotFocus(object sender, RoutedEventArgs e)
+    {
+        TxtHotkey.Text = "(キーを押してください)";
+    }
+
+    private void TxtHotkey_LostFocus(object sender, RoutedEventArgs e)
+    {
+        // フォーカスを失ったとき、未確定なら元の値を表示
+        TxtHotkey.Text = _pendingHotkey ?? "(未設定)";
+    }
+
+    private void TxtHotkey_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        e.Handled = true;
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // 修飾キー単体は無視
+        if (key is Key.LeftCtrl or Key.RightCtrl
+                or Key.LeftAlt or Key.RightAlt
+                or Key.LeftShift or Key.RightShift
+                or Key.LWin or Key.RWin)
+            return;
+
+        // Escape でクリア
+        if (key == Key.Escape)
+        {
+            _pendingHotkey = null;
+            TxtHotkey.Text = "(未設定)";
+            return;
+        }
+
+        string combo = HotkeyService.KeyToString(Keyboard.Modifiers, key);
+        _pendingHotkey = combo;
+        TxtHotkey.Text = combo;
+    }
+
+    private void BtnClearHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _pendingHotkey = null;
+        TxtHotkey.Text = "(未設定)";
+    }
+
+    // --- ボタンハンドラ ---
 
     private void BtnOk_Click(object sender, RoutedEventArgs e)
     {

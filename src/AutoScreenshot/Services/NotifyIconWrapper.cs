@@ -21,6 +21,7 @@ public class NotifyIconWrapper : IDisposable
     private readonly MetadataLogger _metadataLogger;
     private readonly Notifier _notifier;
     private readonly MaskingService _masking;
+    private readonly HotkeyService _hotkeyService;
     private readonly TriggerOrchestrator _orchestrator;
 
     private bool _paused;
@@ -38,6 +39,8 @@ public class NotifyIconWrapper : IDisposable
         _metadataLogger = new MetadataLogger(_config);
         _notifier = new Notifier(_config);
         _masking = new MaskingService();
+        _hotkeyService = new HotkeyService();
+        _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking);
     }
@@ -57,6 +60,10 @@ public class NotifyIconWrapper : IDisposable
 
         _notifier.SetNotifyIcon(_notifyIcon, _normalIcon, _pausedIcon);
         _hook.Start();
+
+        // グローバルホットキー登録
+        _hotkeyService.Register(_config.Config.HotkeyPause);
+        _config.ConfigChanged += OnHotkeyConfigChanged;
 
         // 自動起動の確認・登録
         if (_config.Config.AutoStart && !AutoStartService.IsEnabled())
@@ -111,6 +118,11 @@ public class NotifyIconWrapper : IDisposable
         return menu;
     }
 
+    private void OnHotkeyConfigChanged(object? sender, EventArgs e)
+    {
+        _hotkeyService.Register(_config.Config.HotkeyPause);
+    }
+
     private void OnPauseClick(object? sender, EventArgs e)
     {
         _paused = !_paused;
@@ -128,7 +140,9 @@ public class NotifyIconWrapper : IDisposable
 
     public void Dispose()
     {
+        _config.ConfigChanged -= OnHotkeyConfigChanged;
         _hook.Stop();
+        _hotkeyService.Dispose();
         _orchestrator.Dispose();
         _diffDetector.Dispose();
         _notifyIcon?.Dispose();
