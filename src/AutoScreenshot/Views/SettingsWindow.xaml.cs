@@ -88,6 +88,8 @@ public partial class SettingsWindow : Window
         ChkManualShowTitleDialog.IsChecked = cfg.ManualGen.ShowTitleDialogOnStart;
         ChkOutputMarkdown.IsChecked       = cfg.ManualGen.OutputMarkdown;
         ChkOutputDocx.IsChecked           = cfg.ManualGen.OutputDocx;
+        TxtTemplateMarkdownPath.Text      = cfg.ManualGen.TemplateMarkdownPath;
+        TxtTemplateDotxPath.Text          = cfg.ManualGen.TemplateDotxPath;
 
         // LLM連携 (NF-04: DPAPI 復号して表示)
         ChkLlmEnabled.IsChecked       = cfg.ManualGen.LlmEnabled;
@@ -157,8 +159,10 @@ public partial class SettingsWindow : Window
             cfg.ManualGen.KeyboardMode          = (AutoScreenshot.Models.KeyboardMode)CmbKeyboardMode.SelectedIndex;
             cfg.ManualGen.ChapterTimeGapMinutes = (int)SldrChapterTimeGap.Value;
             cfg.ManualGen.ShowTitleDialogOnStart = ChkManualShowTitleDialog.IsChecked == true;
-            cfg.ManualGen.OutputMarkdown        = ChkOutputMarkdown.IsChecked == true;
-            cfg.ManualGen.OutputDocx            = ChkOutputDocx.IsChecked == true;
+            cfg.ManualGen.OutputMarkdown         = ChkOutputMarkdown.IsChecked == true;
+            cfg.ManualGen.OutputDocx             = ChkOutputDocx.IsChecked == true;
+            cfg.ManualGen.TemplateMarkdownPath   = TxtTemplateMarkdownPath.Text.Trim();
+            cfg.ManualGen.TemplateDotxPath       = TxtTemplateDotxPath.Text.Trim();
 
             // LLM連携 (NF-04: DPAPI 暗号化して保存)
             cfg.ManualGen.LlmEnabled        = ChkLlmEnabled.IsChecked == true;
@@ -267,5 +271,29 @@ public partial class SettingsWindow : Window
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             TxtManualOutputFolder.Text = dialog.SelectedPath;
+    }
+
+    private void BtnBrowseMarkdownTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Markdown テンプレートファイルを選択",
+            Filter = "Markdown ファイル (*.md)|*.md|すべてのファイル (*.*)|*.*",
+            FileName = TxtTemplateMarkdownPath.Text,
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            TxtTemplateMarkdownPath.Text = dialog.FileName;
+    }
+
+    private void BtnBrowseDotxTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Word テンプレートファイルを選択",
+            Filter = "Word テンプレート (*.dotx)|*.dotx|すべてのファイル (*.*)|*.*",
+            FileName = TxtTemplateDotxPath.Text,
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            TxtTemplateDotxPath.Text = dialog.FileName;
     }
 }

@@ -249,6 +249,25 @@
                         <TextBlock Text="出力形式:" FontWeight="Bold" Margin="0,12,0,3"/>
                         <CheckBox x:Name="ChkOutputMarkdown" Content="Markdown (.md)" Margin="0,3"/>
                         <CheckBox x:Name="ChkOutputDocx"     Content="Word (.docx)" Margin="0,3"/>
+
+                        <TextBlock Text="テンプレートファイル (任意 / O-07):" FontWeight="Bold" Margin="0,12,0,3"/>
+                        <TextBlock Text="Markdown テンプレート (.md):" Margin="0,4,0,2"/>
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,2"
+                                   Text="{}{content} プレースホルダーを含む場合はそこに挿入、含まない場合はテンプレートの後ろに追記します。"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="参照..." Width="60" Margin="5,0,0,0"
+                                    Click="BtnBrowseMarkdownTemplate_Click"/>
+                            <TextBox x:Name="TxtTemplateMarkdownPath"/>
+                        </DockPanel>
+
+                        <TextBlock Text="Word テンプレート (.dotx):" Margin="0,8,0,2"/>
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,2"
+                                   Text="テンプレートのスタイルを使用して docx を生成します。"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="参照..." Width="60" Margin="5,0,0,0"
+                                    Click="BtnBrowseDotxTemplate_Click"/>
+                            <TextBox x:Name="TxtTemplateDotxPath"/>
+                        </DockPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

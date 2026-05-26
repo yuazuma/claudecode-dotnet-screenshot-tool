@@ -7,7 +7,8 @@ namespace AutoScreenshot.Services;
 /// <summary>ManualSession を Markdown ファイルに書き出す</summary>
 public class MarkdownManualWriter
 {
-    public async Task WriteAsync(ManualSession session, string outputPath, int chapterTimeGapMinutes = 5)
+    public async Task WriteAsync(ManualSession session, string outputPath,
+        int chapterTimeGapMinutes = 5, string templatePath = "")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         string outputDir = Path.GetDirectoryName(outputPath)!;
@@ -85,8 +86,34 @@ public class MarkdownManualWriter
             }
         }
 
-        await File.WriteAllTextAsync(outputPath, sb.ToString(), Encoding.UTF8);
+        string generated = sb.ToString();
+
+        // O-07: ユーザーテンプレートが指定されていれば適用
+        string finalContent = ApplyMarkdownTemplate(templatePath, generated);
+
+        await File.WriteAllTextAsync(outputPath, finalContent, Encoding.UTF8);
         Log.Information("手順書 Markdown 出力完了: {Path}", outputPath);
+    }
+
+    // O-07: テンプレート適用。{{content}} プレースホルダーがあれば置換、なければ先頭に挿入。
+    private static string ApplyMarkdownTemplate(string templatePath, string generated)
+    {
+        if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath))
+            return generated;
+
+        try
+        {
+            string template = File.ReadAllText(templatePath, Encoding.UTF8);
+            const string placeholder = "{{content}}";
+            return template.Contains(placeholder, StringComparison.OrdinalIgnoreCase)
+                ? template.Replace(placeholder, generated, StringComparison.OrdinalIgnoreCase)
+                : template + Environment.NewLine + generated;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Markdown テンプレート読み込み失敗: {Path}", templatePath);
+            return generated;
+        }
     }
 
     private static List<ChapterGroup> BuildChapters(List<ManualStep> steps, int timeGapMinutes)

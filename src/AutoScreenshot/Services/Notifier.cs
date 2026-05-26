@@ -92,6 +92,17 @@ public class Notifier
         _notifyIcon.ShowBalloonTip(1500, "AutoScreenshot", "スクリーンショットを保存しました", ToolTipIcon.None);
     }
 
+    /// <summary>手順書生成完了通知（NF-03）。LLM 使用時はその旨を付記する。</summary>
+    public void ShowManualGeneratedToast(bool llmUsed = false)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (_notifyIcon == null) return;
+            string msg = llmUsed ? "手順書を生成しました（LLM最適化済み）" : "手順書を生成しました";
+            _notifyIcon.ShowBalloonTip(3000, "AutoScreenshot", msg, ToolTipIcon.Info);
+        });
+    }
+
     public void SetPausedState(bool paused, NotifyIcon icon)
     {
         lock (_countLock)

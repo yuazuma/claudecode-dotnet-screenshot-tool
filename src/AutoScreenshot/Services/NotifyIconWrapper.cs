@@ -42,7 +42,7 @@ public class NotifyIconWrapper : IDisposable
         _masking = new MaskingService();
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
-        _manualRecorder = new ManualSessionRecorder(_config, new UiaService(), new OcrService());
+        _manualRecorder = new ManualSessionRecorder(_config, new UiaService(), new OcrService(), _notifier);
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
             _manualRecorder);
@@ -66,9 +66,9 @@ public class NotifyIconWrapper : IDisposable
         _storage.OnLowDiskSpaceDetected = OnLowDiskSpace;
         _hook.Start();
 
-        // 手順書セッション開始 (S-01)
+        // 手順書セッション開始 (S-01, S-04)
         if (_config.Config.ManualGen.Enabled)
-            _manualRecorder.StartSession();
+            _manualRecorder.StartSession(GetSessionTitle());
 
         // グローバルホットキー登録
         _hotkeyService.Register(_config.Config.HotkeyPause);
@@ -135,7 +135,7 @@ public class NotifyIconWrapper : IDisposable
         };
 
         var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
-        sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession();
+        sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession(GetSessionTitle());
 
         var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
         generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
@@ -160,6 +160,16 @@ public class NotifyIconWrapper : IDisposable
         ]);
 
         return menu;
+    }
+
+    // S-04: ShowTitleDialogOnStart が true のとき入力ダイアログを表示してタイトルを返す
+    private string GetSessionTitle()
+    {
+        if (!_config.Config.ManualGen.ShowTitleDialogOnStart) return "";
+        var dialog = new AutoScreenshot.Views.ManualTitleDialog();
+        return dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.EnteredTitle)
+            ? dialog.EnteredTitle
+            : "";
     }
 
     private void OnHotkeyConfigChanged(object? sender, EventArgs e)

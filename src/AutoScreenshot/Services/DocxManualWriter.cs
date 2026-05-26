@@ -13,10 +13,11 @@ namespace AutoScreenshot.Services;
 /// <summary>ManualSession を Word (.docx) ファイルに書き出す</summary>
 public class DocxManualWriter
 {
-    public async Task WriteAsync(ManualSession session, string outputPath, int chapterTimeGapMinutes = 5)
+    public async Task WriteAsync(ManualSession session, string outputPath,
+        int chapterTimeGapMinutes = 5, string templateDotxPath = "")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        await Task.Run(() => new Generator(session, outputPath, chapterTimeGapMinutes).Run());
+        await Task.Run(() => new Generator(session, outputPath, chapterTimeGapMinutes, templateDotxPath).Run());
         Log.Information("手順書 docx 出力完了: {Path}", outputPath);
     }
 
@@ -26,40 +27,82 @@ public class DocxManualWriter
         private readonly ManualSession _session;
         private readonly string _outputPath;
         private readonly int _timeGapMin;
+        private readonly string _templateDotxPath;
         private uint _drawId;
 
-        public Generator(ManualSession session, string outputPath, int timeGapMin)
+        public Generator(ManualSession session, string outputPath, int timeGapMin, string templateDotxPath = "")
         {
-            _session    = session;
-            _outputPath = outputPath;
-            _timeGapMin = timeGapMin;
+            _session         = session;
+            _outputPath      = outputPath;
+            _timeGapMin      = timeGapMin;
+            _templateDotxPath = templateDotxPath;
         }
 
         public void Run()
         {
-            using var doc     = WordprocessingDocument.Create(_outputPath, WordprocessingDocumentType.Document);
-            var mainPart      = doc.AddMainDocumentPart();
-            mainPart.Document = new Document();
-            var body          = mainPart.Document.AppendChild(new Body());
+            bool useTemplate = !string.IsNullOrWhiteSpace(_templateDotxPath)
+                               && File.Exists(_templateDotxPath);
 
-            DefineStyles(mainPart);
-            var (hId, fId) = AddHeaderFooter(mainPart);
+            WordprocessingDocument doc;
+            MainDocumentPart mainPart;
+            Body body;
 
-            // 表紙 → 改ページ → 目次 → 改ページ → 本文
-            AppendCover(body);
-            body.Append(PageBreak());
-            AppendToc(body);
-            body.Append(PageBreak());
-            AppendContent(body, mainPart);
+            if (useTemplate)
+            {
+                // O-07: .dotx をコピーして .docx に変換し、ボディを空にして再利用
+                try
+                {
+                    File.Copy(_templateDotxPath, _outputPath, overwrite: true);
+                    doc = WordprocessingDocument.Open(_outputPath, true);
+                    doc.ChangeDocumentType(WordprocessingDocumentType.Document);
+                    mainPart = doc.MainDocumentPart!;
+                    mainPart.Document ??= new Document();
+                    body = mainPart.Document.Body ?? mainPart.Document.AppendChild(new Body());
+                    // ボディを空にする（SectionProperties は保持）
+                    var sectPr = body.Elements<SectionProperties>().FirstOrDefault();
+                    body.RemoveAllChildren();
+                    if (sectPr != null) body.Append(sectPr);
+                    // テンプレート固有のスタイルを保持するため DefineStyles は呼ばない
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "dotx テンプレート読み込み失敗: {Path}. 通常作成に切り替えます。", _templateDotxPath);
+                    doc = WordprocessingDocument.Create(_outputPath, WordprocessingDocumentType.Document);
+                    mainPart = doc.AddMainDocumentPart();
+                    mainPart.Document = new Document();
+                    body = mainPart.Document.AppendChild(new Body());
+                    DefineStyles(mainPart);
+                }
+            }
+            else
+            {
+                doc      = WordprocessingDocument.Create(_outputPath, WordprocessingDocumentType.Document);
+                mainPart = doc.AddMainDocumentPart();
+                mainPart.Document = new Document();
+                body     = mainPart.Document.AppendChild(new Body());
+                DefineStyles(mainPart);
+            }
 
-            // セクションプロパティ（A4、ヘッダー/フッター参照）
-            body.Append(new SectionProperties(
-                new HeaderReference { Type = HeaderFooterValues.Default, Id = hId },
-                new FooterReference { Type = HeaderFooterValues.Default, Id = fId },
-                new PageSize   { Width = 11906, Height = 16838 },
-                new PageMargin { Top = 1134, Bottom = 1134, Left = 1701, Right = 1701 }));
+            using (doc)
+            {
+                var (hId, fId) = AddHeaderFooter(mainPart);
 
-            mainPart.Document.Save();
+                // 表紙 → 改ページ → 目次 → 改ページ → 本文
+                AppendCover(body);
+                body.Append(PageBreak());
+                AppendToc(body);
+                body.Append(PageBreak());
+                AppendContent(body, mainPart);
+
+                // セクションプロパティ（A4、ヘッダー/フッター参照）
+                body.Append(new SectionProperties(
+                    new HeaderReference { Type = HeaderFooterValues.Default, Id = hId },
+                    new FooterReference { Type = HeaderFooterValues.Default, Id = fId },
+                    new PageSize   { Width = 11906, Height = 16838 },
+                    new PageMargin { Top = 1134, Bottom = 1134, Left = 1701, Right = 1701 }));
+
+                mainPart.Document.Save();
+            }
         }
 
         // ── スタイル定義 ────────────────────────────────────────────────────────

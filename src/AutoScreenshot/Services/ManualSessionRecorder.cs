@@ -9,17 +9,19 @@ public class ManualSessionRecorder
     private readonly ConfigStore _config;
     private readonly UiaService _uia;
     private readonly OcrService _ocr;
+    private readonly Notifier? _notifier;
     private readonly MarkdownManualWriter _mdWriter   = new();
     private readonly DocxManualWriter     _docxWriter = new();
 
     private ManualSession? _current;
     private readonly object _lock = new();
 
-    public ManualSessionRecorder(ConfigStore config, UiaService uia, OcrService ocr)
+    public ManualSessionRecorder(ConfigStore config, UiaService uia, OcrService ocr, Notifier? notifier = null)
     {
-        _config = config;
-        _uia = uia;
-        _ocr = ocr;
+        _config   = config;
+        _uia      = uia;
+        _ocr      = ocr;
+        _notifier = notifier;
     }
 
     /// <summary>新しいセッションを開始する。title が空なら既定タイトルを使用する。</summary>
@@ -167,6 +169,7 @@ public class ManualSessionRecorder
         }
 
         // LLM 連携 (L-02: エンドポイントと API キーの両方が設定されている場合のみ実行)
+        bool llmUsed = false;
         if (cfg.LlmEnabled &&
             !string.IsNullOrWhiteSpace(cfg.LlmEndpoint) &&
             !string.IsNullOrWhiteSpace(cfg.LlmApiKey))
@@ -180,8 +183,9 @@ public class ManualSessionRecorder
                 {
                     var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
                     Log.Information("LLM 操作テキスト改善を開始...");
-                    await llm.ImproveDescriptionsAsync(session);       // L-03
+                    await llm.ImproveDescriptionsAsync(session);            // L-03
                     session.Digest = await llm.GenerateDigestAsync(session); // L-04
+                    llmUsed = true;
                     Log.Information("LLM 処理完了");
                 }
             }
@@ -202,9 +206,14 @@ public class ManualSessionRecorder
         {
             int gap = cfg.ChapterTimeGapMinutes;
             if (cfg.OutputMarkdown)
-                await _mdWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".md"), gap);
+                await _mdWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".md"), gap,
+                    cfg.TemplateMarkdownPath);
             if (cfg.OutputDocx)
-                await _docxWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".docx"), gap);
+                await _docxWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".docx"), gap,
+                    cfg.TemplateDotxPath);
+
+            // NF-03: 手順書生成完了をトースト通知
+            _notifier?.ShowManualGeneratedToast(llmUsed);
         }
         catch (Exception ex)
         {
