@@ -31,7 +31,7 @@ public class FileStorage
         string path = Path.Combine(folder, fileName);
 
         await File.WriteAllBytesAsync(path, imageData);
-        Log.Debug("保存: {Path}", path);
+        Log.Information("保存完了: {Path}", path);
 
         CheckDiskSpace(folder);
         return path;

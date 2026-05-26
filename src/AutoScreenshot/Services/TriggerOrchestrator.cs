@@ -102,19 +102,27 @@ public class TriggerOrchestrator : IDisposable
 
     private void OnDiffTimer(object? state)
     {
-        if (_paused || !_config.Config.Triggers.ScreenDiff) return;
+        try
+        {
+            if (_paused || !_config.Config.Triggers.ScreenDiff) return;
 
-        double threshold = _config.Config.Triggers.ScreenDiffThresholdPercent;
-        var changedScreens = _diffDetector.DetectChangedScreens(threshold);
-        if (changedScreens.Count == 0) return;
+            double threshold = _config.Config.Triggers.ScreenDiffThresholdPercent;
+            var changedScreens = _diffDetector.DetectChangedScreens(threshold);
+            Log.Debug("差分チェック: 変化モニタ数={Count}", changedScreens.Count);
+            if (changedScreens.Count == 0) return;
 
-        if (!CheckCooldown(TriggerType.ScreenDiff, _config.Config.Triggers.CooldownScreenDiff)) return;
-        if (IsExcludedApp()) return;
+            if (!CheckCooldown(TriggerType.ScreenDiff, _config.Config.Triggers.CooldownScreenDiff)) return;
+            if (IsExcludedApp()) return;
 
-        // キーボード・マウス直後の差分は除外
-        if ((DateTime.UtcNow - _lastKeyboardActivity).TotalSeconds < 1.0) return;
+            // キーボード・マウス直後の差分は除外
+            if ((DateTime.UtcNow - _lastKeyboardActivity).TotalSeconds < 1.0) return;
 
-        FireCapture(TriggerType.ScreenDiff);
+            FireCapture(TriggerType.ScreenDiff);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "OnDiffTimer 例外");
+        }
     }
 
     private void FireCapture(TriggerType trigger)

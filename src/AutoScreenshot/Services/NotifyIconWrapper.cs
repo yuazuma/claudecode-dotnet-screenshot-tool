@@ -1,6 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
-using System.Windows;
+using AutoScreenshot.Resources;
 using AutoScreenshot.Views;
 using Serilog;
 
@@ -10,6 +10,9 @@ namespace AutoScreenshot.Services;
 public class NotifyIconWrapper : IDisposable
 {
     private NotifyIcon? _notifyIcon;
+    private Icon? _normalIcon;
+    private Icon? _pausedIcon;
+
     private readonly ConfigStore _config;
     private readonly HookService _hook;
     private readonly CaptureService _capture;
@@ -20,6 +23,7 @@ public class NotifyIconWrapper : IDisposable
     private readonly TriggerOrchestrator _orchestrator;
 
     private bool _paused;
+    private ToolStripMenuItem? _pauseItem;
 
     public NotifyIconWrapper()
     {
@@ -38,17 +42,18 @@ public class NotifyIconWrapper : IDisposable
 
     public void Initialize()
     {
-        var icon = CreateDefaultIcon();
+        _normalIcon = IconFactory.CreateNormalIcon(32);
+        _pausedIcon = IconFactory.CreatePausedIcon(32);
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = icon,
+            Icon = _normalIcon,
             Text = "AutoScreenshot",
             Visible = true,
             ContextMenuStrip = BuildContextMenu(),
         };
 
-        _notifier.SetNotifyIcon(_notifyIcon, icon, null);
+        _notifier.SetNotifyIcon(_notifyIcon, _normalIcon, _pausedIcon);
         _hook.Start();
 
         // 自動起動の確認・登録
@@ -62,14 +67,8 @@ public class NotifyIconWrapper : IDisposable
     {
         var menu = new ContextMenuStrip();
 
-        var pauseItem = new ToolStripMenuItem("一時停止");
-        pauseItem.Click += (_, _) =>
-        {
-            _paused = !_paused;
-            _orchestrator.SetPaused(_paused);
-            pauseItem.Text = _paused ? "再開" : "一時停止";
-            _notifier.SetPausedState(_paused, _notifyIcon!);
-        };
+        _pauseItem = new ToolStripMenuItem("一時停止");
+        _pauseItem.Click += OnPauseClick;
 
         var openFolderItem = new ToolStripMenuItem("保存フォルダを開く");
         openFolderItem.Click += (_, _) =>
@@ -91,14 +90,17 @@ public class NotifyIconWrapper : IDisposable
 
         var versionItem = new ToolStripMenuItem("バージョン情報");
         versionItem.Click += (_, _) =>
-            System.Windows.MessageBox.Show("AutoScreenshot v1.0\n© 2026", "バージョン情報",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(
+                "AutoScreenshot v1.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影ツール",
+                "バージョン情報",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
 
         var exitItem = new ToolStripMenuItem("終了");
         exitItem.Click += (_, _) => System.Windows.Application.Current.Shutdown();
 
         menu.Items.AddRange([
-            pauseItem, openFolderItem, new ToolStripSeparator(),
+            _pauseItem, openFolderItem, new ToolStripSeparator(),
             settingsItem, captureNowItem, new ToolStripSeparator(),
             versionItem, new ToolStripSeparator(),
             exitItem
@@ -107,15 +109,19 @@ public class NotifyIconWrapper : IDisposable
         return menu;
     }
 
-    private static Icon CreateDefaultIcon()
+    private void OnPauseClick(object? sender, EventArgs e)
     {
-        // ビルドイン暫定アイコン (カメラ形状のシンプルなビットマップ)
-        var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.FromArgb(0, 120, 215));
-        g.FillEllipse(Brushes.White, 3, 4, 10, 8);
-        g.FillEllipse(new SolidBrush(Color.FromArgb(0, 120, 215)), 5, 6, 6, 5);
-        return Icon.FromHandle(bmp.GetHicon());
+        _paused = !_paused;
+        _orchestrator.SetPaused(_paused);
+
+        if (_pauseItem != null)
+            _pauseItem.Text = _paused ? "再開" : "一時停止";
+
+        if (_notifyIcon != null)
+        {
+            _notifyIcon.Icon = _paused ? _pausedIcon : _normalIcon;
+            _notifier.SetPausedState(_paused, _notifyIcon);
+        }
     }
 
     public void Dispose()
@@ -124,5 +130,7 @@ public class NotifyIconWrapper : IDisposable
         _orchestrator.Dispose();
         _diffDetector.Dispose();
         _notifyIcon?.Dispose();
+        _normalIcon?.Dispose();
+        _pausedIcon?.Dispose();
     }
 }
