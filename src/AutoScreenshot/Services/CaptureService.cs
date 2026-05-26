@@ -103,6 +103,47 @@ public class CaptureService
     private static ImageCodecInfo? GetCodecInfo(string mimeType) =>
         ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.MimeType == mimeType);
 
+    /// <summary>カーソル位置にトリガー種別に応じた色付きマーカーを描画する (F-06-08/09)</summary>
+    public void DrawImageOverlay(Bitmap bmp, System.Drawing.Point cursor,
+        Rectangle monitorBounds, Models.TriggerType trigger)
+    {
+        int localX = cursor.X - monitorBounds.X;
+        int localY = cursor.Y - monitorBounds.Y;
+        if (localX < 0 || localY < 0 || localX >= bmp.Width || localY >= bmp.Height) return;
+
+        Color markerColor = trigger switch
+        {
+            Models.TriggerType.MouseLeftClick     => Color.Red,
+            Models.TriggerType.MouseRightClick    => Color.Blue,
+            Models.TriggerType.MouseMiddleClick   => Color.LimeGreen,
+            Models.TriggerType.MouseDragDrop      => Color.Orange,
+            Models.TriggerType.MouseWheel         => Color.MediumPurple,
+            Models.TriggerType.Keyboard           => Color.Yellow,
+            Models.TriggerType.ActiveWindowChange => Color.Cyan,
+            Models.TriggerType.ScreenDiff         => Color.DeepPink,
+            _                                     => Color.White,
+        };
+
+        const int r = 20;
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        // 半透明の塗りつぶし円 (F-06-08)
+        using var fill = new SolidBrush(Color.FromArgb(70, markerColor));
+        g.FillEllipse(fill, localX - r, localY - r, r * 2, r * 2);
+
+        // 色付き枠線 (F-06-09)
+        using var border = new Pen(markerColor, 3f);
+        g.DrawEllipse(border, localX - r, localY - r, r * 2, r * 2);
+
+        // クロスヘア
+        using var cross = new Pen(markerColor, 2f);
+        g.DrawLine(cross, localX - r - 6, localY, localX - 6, localY);
+        g.DrawLine(cross, localX + 6, localY, localX + r + 6, localY);
+        g.DrawLine(cross, localX, localY - r - 6, localX, localY - 6);
+        g.DrawLine(cross, localX, localY + 6, localX, localY + r + 6);
+    }
+
     /// <summary>画像の左下にタイムスタンプを焼き込む</summary>
     public void BurnTimestamp(Bitmap bmp, DateTime timestamp)
     {

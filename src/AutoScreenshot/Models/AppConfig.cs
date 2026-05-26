@@ -76,6 +76,7 @@ public class MetadataConfig
     public bool StructuredOutput { get; set; } = false;
     public StructuredFormat StructuredFormat { get; set; } = StructuredFormat.JsonLines;
     public bool BurnTimestamp { get; set; } = false;
+    public bool ImageOverlay { get; set; } = false;
 }
 
 public class PrivacyConfig

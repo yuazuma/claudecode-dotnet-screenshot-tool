@@ -20,4 +20,7 @@ public record TriggerEvent(
     string ActiveWindowTitle,
     string ActiveProcessName,
     int MonitorIndex
-);
+)
+{
+    public Guid EventId { get; init; } = Guid.NewGuid();
+}

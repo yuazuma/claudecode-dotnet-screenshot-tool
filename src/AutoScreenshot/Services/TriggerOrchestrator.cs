@@ -173,6 +173,10 @@ public class TriggerOrchestrator : IDisposable
                     if (cfg.Privacy.MaskPasswordFields)
                         _masking.ApplyMasking(bmp, bounds);
 
+                    // カーソル位置オーバーレイ描画
+                    if (cfg.Metadata.ImageOverlay)
+                        _capture.DrawImageOverlay(bmp, cursorPos, bounds, trigger);
+
                     // タイムスタンプ焼き込み
                     if (cfg.Metadata.BurnTimestamp)
                         _capture.BurnTimestamp(bmp, evt.Timestamp);

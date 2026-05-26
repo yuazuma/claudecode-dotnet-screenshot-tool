@@ -46,6 +46,7 @@ public class MetadataLogger
             string jsonFile = Path.Combine(logDir, $"events_{evt.Timestamp:yyyy-MM-dd}.jsonl");
             var record = new
             {
+                event_id = evt.EventId.ToString("N"),
                 timestamp = evt.Timestamp.ToString("O"),
                 trigger = evt.Type.ToString(),
                 window_title = evt.ActiveWindowTitle,
@@ -63,14 +64,18 @@ public class MetadataLogger
             string csvFile = Path.Combine(logDir, $"events_{evt.Timestamp:yyyy-MM-dd}.csv");
             if (!File.Exists(csvFile))
                 await File.WriteAllTextAsync(csvFile,
-                    "timestamp,trigger,window_title,process,cursor_x,cursor_y,monitor,image_path\n");
+                    "event_id,timestamp,trigger,window_title,process,cursor_x,cursor_y,monitor,image_path\n");
 
             string row = string.Join(",",
-                evt.Timestamp.ToString("O"), evt.Type,
+                evt.EventId.ToString("N"),
+                evt.Timestamp.ToString("O"),
+                evt.Type,
                 $"\"{evt.ActiveWindowTitle.Replace("\"", "\"\"")}\"",
                 evt.ActiveProcessName,
-                evt.CursorPosition.X, evt.CursorPosition.Y,
-                evt.MonitorIndex, imagePath);
+                evt.CursorPosition.X,
+                evt.CursorPosition.Y,
+                evt.MonitorIndex,
+                imagePath);
             await File.AppendAllTextAsync(csvFile, row + Environment.NewLine);
         }
     }

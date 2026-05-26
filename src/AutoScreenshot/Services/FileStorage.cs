@@ -10,6 +10,9 @@ public class FileStorage
     private string? _sessionId;
     private Notifier? _notifier;
     private DateTime _lastDiskWarning = DateTime.MinValue;
+    private readonly Queue<string> _recentPaths = new();
+
+    public Action? OnLowDiskSpaceDetected { get; set; }
 
     public FileStorage(ConfigStore config)
     {
@@ -37,8 +40,19 @@ public class FileStorage
         await File.WriteAllBytesAsync(path, imageData);
         Log.Information("保存完了: {Path}", path);
 
+        lock (_recentPaths)
+        {
+            _recentPaths.Enqueue(path);
+            while (_recentPaths.Count > 10) _recentPaths.Dequeue();
+        }
+
         CheckDiskSpace(folder);
         return path;
+    }
+
+    public IReadOnlyList<string> GetRecentPaths()
+    {
+        lock (_recentPaths) { return [.. _recentPaths.Reverse()]; }
     }
 
     private string BuildFolderPath(TriggerEvent evt)
@@ -58,10 +72,24 @@ public class FileStorage
         };
     }
 
+    private static string TriggerToken(TriggerType type) => type switch
+    {
+        TriggerType.ManualCapture      => "manual",
+        TriggerType.MouseLeftClick     => "click",
+        TriggerType.MouseRightClick    => "rightclick",
+        TriggerType.MouseMiddleClick   => "middleclick",
+        TriggerType.MouseDragDrop      => "drag",
+        TriggerType.MouseWheel         => "scroll",
+        TriggerType.Keyboard           => "keyboard",
+        TriggerType.ActiveWindowChange => "windowchange",
+        TriggerType.ScreenDiff         => "diff",
+        _                              => type.ToString().ToLowerInvariant(),
+    };
+
     private static string BuildFileName(TriggerEvent evt, string ext)
     {
         string ts = evt.Timestamp.ToString("yyyyMMdd_HHmmss_fff");
-        string trigger = evt.Type.ToString().ToLowerInvariant();
+        string trigger = TriggerToken(evt.Type);
         return $"{ts}_{trigger}_monitor{evt.MonitorIndex}.{ext}";
     }
 
@@ -83,6 +111,8 @@ public class FileStorage
                     _lastDiskWarning = DateTime.Now;
                     _notifier.ShowDiskWarning(freeMb);
                 }
+
+                OnLowDiskSpaceDetected?.Invoke();
             }
         }
         catch (Exception ex)

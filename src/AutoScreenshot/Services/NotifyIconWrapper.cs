@@ -60,6 +60,7 @@ public class NotifyIconWrapper : IDisposable
 
         _notifier.SetNotifyIcon(_notifyIcon, _normalIcon, _pausedIcon);
         _storage.SetNotifier(_notifier);
+        _storage.OnLowDiskSpaceDetected = OnLowDiskSpace;
         _hook.Start();
 
         // グローバルホットキー登録
@@ -98,6 +99,34 @@ public class NotifyIconWrapper : IDisposable
         var captureNowItem = new ToolStripMenuItem("今すぐ撮影");
         captureNowItem.Click += (_, _) => _orchestrator.CaptureNow();
 
+        var historyItem = new ToolStripMenuItem("キャプチャ履歴");
+        menu.Opening += (_, _) =>
+        {
+            historyItem.DropDownItems.Clear();
+            var paths = _storage.GetRecentPaths();
+            if (paths.Count == 0)
+            {
+                historyItem.DropDownItems.Add(
+                    new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
+            }
+            else
+            {
+                foreach (var p in paths)
+                {
+                    string name = Path.GetFileName(p);
+                    var item = new ToolStripMenuItem(name);
+                    string capturePath = p;
+                    item.Click += (_, _) =>
+                    {
+                        if (File.Exists(capturePath))
+                            System.Diagnostics.Process.Start(
+                                "explorer.exe", $"/select,\"{capturePath}\"");
+                    };
+                    historyItem.DropDownItems.Add(item);
+                }
+            }
+        };
+
         var versionItem = new ToolStripMenuItem("バージョン情報");
         versionItem.Click += (_, _) =>
             System.Windows.MessageBox.Show(
@@ -111,7 +140,7 @@ public class NotifyIconWrapper : IDisposable
 
         menu.Items.AddRange([
             _pauseItem, openFolderItem, new ToolStripSeparator(),
-            settingsItem, captureNowItem, new ToolStripSeparator(),
+            settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
             versionItem, new ToolStripSeparator(),
             exitItem
         ]);
@@ -122,6 +151,23 @@ public class NotifyIconWrapper : IDisposable
     private void OnHotkeyConfigChanged(object? sender, EventArgs e)
     {
         _hotkeyService.Register(_config.Config.HotkeyPause);
+    }
+
+    private void OnLowDiskSpace()
+    {
+        if (_paused) return;
+        Log.Warning("ディスク容量不足のため撮影を自動一時停止");
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            _paused = true;
+            _orchestrator.SetPaused(true);
+            if (_pauseItem != null) _pauseItem.Text = "再開";
+            if (_notifyIcon != null)
+            {
+                _notifyIcon.Icon = _pausedIcon;
+                _notifier.SetPausedState(true, _notifyIcon);
+            }
+        });
     }
 
     private void OnPauseClick(object? sender, EventArgs e)

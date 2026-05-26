@@ -64,6 +64,7 @@ public partial class SettingsWindow : Window
         // メタデータ
         ChkSidecarLog.IsChecked    = cfg.Metadata.SidecarTextLog;
         ChkBurnTimestamp.IsChecked = cfg.Metadata.BurnTimestamp;
+        ChkImageOverlay.IsChecked  = cfg.Metadata.ImageOverlay;
         ChkStructuredOutput.IsChecked = cfg.Metadata.StructuredOutput;
         RdoJsonLines.IsChecked = cfg.Metadata.StructuredFormat == StructuredFormat.JsonLines;
         RdoCsv.IsChecked       = cfg.Metadata.StructuredFormat == StructuredFormat.Csv;
@@ -120,6 +121,7 @@ public partial class SettingsWindow : Window
 
             cfg.Metadata.SidecarTextLog    = ChkSidecarLog.IsChecked == true;
             cfg.Metadata.BurnTimestamp     = ChkBurnTimestamp.IsChecked == true;
+            cfg.Metadata.ImageOverlay      = ChkImageOverlay.IsChecked == true;
             cfg.Metadata.StructuredOutput  = ChkStructuredOutput.IsChecked == true;
             cfg.Metadata.StructuredFormat  = RdoCsv.IsChecked == true
                                            ? StructuredFormat.Csv : StructuredFormat.JsonLines;
