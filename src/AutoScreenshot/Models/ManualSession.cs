@@ -9,6 +9,8 @@ public class ManualSession
     public string OsInfo { get; init; } =
         $"{Environment.OSVersion} / {Environment.UserName}";
     public List<ManualStep> Steps { get; } = [];
+    /// <summary>LLM が生成した操作内容の要約（3〜5 行）。LLM 無効時は null。</summary>
+    public string? Digest { get; set; }
 }
 
 public class ManualStep

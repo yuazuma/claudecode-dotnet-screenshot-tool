@@ -88,6 +88,12 @@ public partial class SettingsWindow : Window
         ChkManualShowTitleDialog.IsChecked = cfg.ManualGen.ShowTitleDialogOnStart;
         ChkOutputMarkdown.IsChecked       = cfg.ManualGen.OutputMarkdown;
         ChkOutputDocx.IsChecked           = cfg.ManualGen.OutputDocx;
+
+        // LLM連携 (NF-04: DPAPI 復号して表示)
+        ChkLlmEnabled.IsChecked       = cfg.ManualGen.LlmEnabled;
+        PwdLlmEndpoint.Password       = DpapiHelper.Unprotect(cfg.ManualGen.LlmEndpoint);
+        PwdLlmApiKey.Password         = DpapiHelper.Unprotect(cfg.ManualGen.LlmApiKey);
+        TxtLlmDeploymentName.Text     = cfg.ManualGen.LlmDeploymentName;
     }
 
     private void ApplySettings()
@@ -153,6 +159,12 @@ public partial class SettingsWindow : Window
             cfg.ManualGen.ShowTitleDialogOnStart = ChkManualShowTitleDialog.IsChecked == true;
             cfg.ManualGen.OutputMarkdown        = ChkOutputMarkdown.IsChecked == true;
             cfg.ManualGen.OutputDocx            = ChkOutputDocx.IsChecked == true;
+
+            // LLM連携 (NF-04: DPAPI 暗号化して保存)
+            cfg.ManualGen.LlmEnabled        = ChkLlmEnabled.IsChecked == true;
+            cfg.ManualGen.LlmEndpoint       = DpapiHelper.Protect(PwdLlmEndpoint.Password);
+            cfg.ManualGen.LlmApiKey         = DpapiHelper.Protect(PwdLlmApiKey.Password);
+            cfg.ManualGen.LlmDeploymentName = TxtLlmDeploymentName.Text.Trim();
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 

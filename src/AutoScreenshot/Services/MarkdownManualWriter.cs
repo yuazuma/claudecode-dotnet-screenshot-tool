@@ -25,6 +25,15 @@ public class MarkdownManualWriter
         sb.AppendLine($"- **セッションID**: {session.SessionId:N}");
         sb.AppendLine();
 
+        // ダイジェスト (LLM が生成した要約 D-01, L-04)
+        if (!string.IsNullOrWhiteSpace(session.Digest))
+        {
+            sb.AppendLine("## 操作内容サマリー");
+            sb.AppendLine();
+            sb.AppendLine(session.Digest);
+            sb.AppendLine();
+        }
+
         // 目次（チャプター一覧）
         var chapters = BuildChapters(session.Steps, chapterTimeGapMinutes);
         if (chapters.Count > 0)

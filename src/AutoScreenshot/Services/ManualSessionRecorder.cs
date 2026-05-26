@@ -166,6 +166,31 @@ public class ManualSessionRecorder
             return;
         }
 
+        // LLM 連携 (L-02: エンドポイントと API キーの両方が設定されている場合のみ実行)
+        if (cfg.LlmEnabled &&
+            !string.IsNullOrWhiteSpace(cfg.LlmEndpoint) &&
+            !string.IsNullOrWhiteSpace(cfg.LlmApiKey))
+        {
+            try
+            {
+                string endpoint = DpapiHelper.Unprotect(cfg.LlmEndpoint);
+                string apiKey   = DpapiHelper.Unprotect(cfg.LlmApiKey);
+
+                if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(apiKey))
+                {
+                    var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
+                    Log.Information("LLM 操作テキスト改善を開始...");
+                    await llm.ImproveDescriptionsAsync(session);       // L-03
+                    session.Digest = await llm.GenerateDigestAsync(session); // L-04
+                    Log.Information("LLM 処理完了");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "LLM 処理中にエラーが発生しました。ルールベースで続行します。"); // L-06
+            }
+        }
+
         string folder = string.IsNullOrWhiteSpace(cfg.OutputFolder)
             ? Path.Combine(_config.Config.Storage.SaveFolder, "manuals")
             : cfg.OutputFolder;

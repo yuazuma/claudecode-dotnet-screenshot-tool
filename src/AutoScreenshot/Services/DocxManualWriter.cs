@@ -147,6 +147,15 @@ public class DocxManualWriter
                 body.Append(Para($"終了日時: {_session.EndedAt:yyyy-MM-dd HH:mm:ss}", "Normal"));
             body.Append(Para($"OS / ユーザー: {_session.OsInfo}", "Normal"));
             body.Append(Para("作成ツール: AutoScreenshot v1.0", "Normal"));
+
+            // ダイジェスト (D-01, L-04)
+            if (!string.IsNullOrWhiteSpace(_session.Digest))
+            {
+                body.Append(Para("", "Normal"));
+                body.Append(Para("操作内容サマリー", "Heading2"));
+                foreach (var line in _session.Digest.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                    body.Append(Para(line.Trim(), "Normal"));
+            }
         }
 
         // ── 目次（Word がファイルを開いた時に更新）──────────────────────────

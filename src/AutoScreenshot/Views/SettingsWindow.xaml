@@ -253,6 +253,33 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- LLM連携 (L-01) -->
+            <TabItem Header="LLM連携">
+                <ScrollViewer>
+                    <StackPanel Margin="10" VerticalAlignment="Top">
+                        <CheckBox x:Name="ChkLlmEnabled" Content="LLM 連携を有効にする" Margin="0,5"/>
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,2,0,8"
+                                   Text="エンドポイント URL と API キーが両方設定されている場合のみ有効になります。"/>
+
+                        <TextBlock Text="Microsoft Azure AI Foundry エンドポイント URL:" Margin="0,5,0,2"/>
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,2"
+                                   Text="例: https://&lt;resource&gt;.services.ai.azure.com/models"/>
+                        <PasswordBox x:Name="PwdLlmEndpoint"/>
+
+                        <TextBlock Text="Azure AI Foundry API キー:" Margin="0,10,0,2"/>
+                        <PasswordBox x:Name="PwdLlmApiKey"/>
+
+                        <TextBlock Text="デプロイメント名 (モデル識別子):" Margin="0,10,0,2"/>
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,0,0,2"
+                                   Text="Azure AI Foundry プロジェクトのデプロイ名を入力してください。"/>
+                        <TextBox x:Name="TxtLlmDeploymentName" Width="280" HorizontalAlignment="Left"/>
+
+                        <TextBlock FontSize="10" Foreground="Gray" Margin="0,16,0,0" TextWrapping="Wrap"
+                                   Text="※ Azure AI Foundry 上にデプロイされた Claude モデルを呼び出します。スクリーンショット画像は送信されません（テキスト情報のみ）。"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
 
         <!-- ボタン行 -->
