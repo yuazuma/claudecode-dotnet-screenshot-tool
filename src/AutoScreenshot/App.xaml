@@ -1,0 +1,8 @@
+<Application x:Class="AutoScreenshot.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:AutoScreenshot">
+    <!-- StartupUri は使用しない (タスクトレイ常駐のため App.xaml.cs で手動制御) -->
+    <Application.Resources>
+    </Application.Resources>
+</Application>

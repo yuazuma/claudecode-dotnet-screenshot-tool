@@ -1,0 +1,47 @@
+# .NET ビルド成果物
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+.nuget/
+
+# Visual Studio
+.vs/
+*.rsuser
+*.vsp
+*.vspx
+.idea/
+
+# ユーザー固有の設定
+*.userprefs
+*.pidb
+*.booproj
+
+# 発行成果物
+publish/
+PublishProfiles/
+
+# OS 生成ファイル
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ログ・クラッシュレポート
+logs/
+*.log
+crash_*.log
+
+# アプリケーション設定 (ユーザーごとに異なるため除外)
+config.json
+
+# 撮影画像 (運用データのため除外)
+Pictures/
