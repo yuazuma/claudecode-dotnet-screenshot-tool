@@ -43,6 +43,14 @@ public partial class SettingsWindow : Window
         SldrDragThreshold.Value = cfg.Triggers.DragThresholdMs;
         SldrWheelIdle.Value     = cfg.Triggers.WheelIdleMs;
 
+        // クールダウン
+        SldrCooldownClick.Value    = cfg.Triggers.CooldownMouseClick;
+        SldrCooldownDrag.Value     = cfg.Triggers.CooldownMouseDragDrop;
+        SldrCooldownWheel.Value    = cfg.Triggers.CooldownMouseWheel;
+        SldrCooldownKeyboard.Value = cfg.Triggers.CooldownKeyboard;
+        SldrCooldownWindow.Value   = cfg.Triggers.CooldownActiveWindow;
+        SldrCooldownDiff.Value     = cfg.Triggers.CooldownScreenDiff;
+
         // 保存
         TxtSaveFolder.Text = cfg.Storage.SaveFolder;
         RdoPng.IsChecked   = cfg.Storage.ImageFormat == ImageFormat.Png;
@@ -95,6 +103,13 @@ public partial class SettingsWindow : Window
             cfg.Triggers.ScreenDiffThresholdPercent = SldrDiffThreshold.Value;
             cfg.Triggers.DragThresholdMs            = (int)SldrDragThreshold.Value;
             cfg.Triggers.WheelIdleMs                = (int)SldrWheelIdle.Value;
+
+            cfg.Triggers.CooldownMouseClick    = SldrCooldownClick.Value;
+            cfg.Triggers.CooldownMouseDragDrop = SldrCooldownDrag.Value;
+            cfg.Triggers.CooldownMouseWheel    = SldrCooldownWheel.Value;
+            cfg.Triggers.CooldownKeyboard      = SldrCooldownKeyboard.Value;
+            cfg.Triggers.CooldownActiveWindow  = SldrCooldownWindow.Value;
+            cfg.Triggers.CooldownScreenDiff    = SldrCooldownDiff.Value;
 
             cfg.Storage.SaveFolder  = TxtSaveFolder.Text;
             cfg.Storage.ImageFormat = RdoJpeg.IsChecked == true ? ImageFormat.Jpeg

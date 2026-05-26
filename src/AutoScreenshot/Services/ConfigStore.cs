@@ -48,6 +48,8 @@ public class ConfigStore
             string json = File.ReadAllText(path);
             _config = JsonSerializer.Deserialize<AppConfig>(json, _jsonOptions) ?? new AppConfig();
             Log.Information("設定を読み込みました: {Path}", path);
+            // モデルに新規追加されたフィールドを config.json に書き出す
+            Save();
         }
         catch (Exception ex)
         {

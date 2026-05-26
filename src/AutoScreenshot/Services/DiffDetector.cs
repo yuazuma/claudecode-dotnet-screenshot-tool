@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Windows.Forms;
@@ -27,7 +28,17 @@ public class DiffDetector : IDisposable
 
         for (int i = 0; i < screens.Length; i++)
         {
-            var thumb = _captureService.CaptureThumbnail(screens[i].Bounds);
+            Bitmap thumb;
+            try
+            {
+                thumb = _captureService.CaptureThumbnail(screens[i].Bounds);
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 6)
+            {
+                // ERROR_INVALID_HANDLE: スリープ中・RDP切断等でディスプレイが利用不能
+                Log.Debug("差分検知スキップ (ディスプレイ利用不能): モニタ{Idx}", i);
+                return changed;
+            }
 
             lock (_lock)
             {

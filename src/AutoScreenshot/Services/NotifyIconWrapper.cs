@@ -59,6 +59,7 @@ public class NotifyIconWrapper : IDisposable
         };
 
         _notifier.SetNotifyIcon(_notifyIcon, _normalIcon, _pausedIcon);
+        _storage.SetNotifier(_notifier);
         _hook.Start();
 
         // グローバルホットキー登録

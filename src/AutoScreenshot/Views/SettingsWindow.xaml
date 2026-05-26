@@ -82,6 +82,52 @@
                             <TextBlock Text="{Binding ElementName=SldrDiffThreshold, Path=Value, StringFormat='{}{0}%'}"
                                        VerticalAlignment="Center" Margin="5,0"/>
                         </StackPanel>
+
+                        <TextBlock Text="クールダウン (秒)" FontWeight="Bold" Margin="0,10,0,3"/>
+                        <TextBlock Text="同じトリガーが短時間に連続発火しないよう間引く最小間隔です。"
+                                   FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="クリック:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownClick" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownClick, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="ドラッグ:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownDrag" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownDrag, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="ホイール:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownWheel" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownWheel, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="キーボード:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownKeyboard" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownKeyboard, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="ウィンドウ切替:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownWindow" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownWindow, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="10,3">
+                            <TextBlock Text="画面差分:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrCooldownDiff" Minimum="0.5" Maximum="10" Width="150"
+                                    TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrCooldownDiff, Path=Value, StringFormat='{}{0:0.0}秒'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

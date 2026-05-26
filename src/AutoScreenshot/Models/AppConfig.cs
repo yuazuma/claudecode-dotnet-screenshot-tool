@@ -73,7 +73,6 @@ public class StorageConfig
 public class MetadataConfig
 {
     public bool SidecarTextLog { get; set; } = true;
-    public bool ImageOverlay { get; set; } = false;
     public bool StructuredOutput { get; set; } = false;
     public StructuredFormat StructuredFormat { get; set; } = StructuredFormat.JsonLines;
     public bool BurnTimestamp { get; set; } = false;

@@ -9,6 +9,7 @@ public class Notifier
 {
     private readonly ConfigStore _config;
     private NotifyIcon? _notifyIcon;
+    private readonly object _countLock = new();
     private int _todayCount;
     private DateTime _countDate = DateTime.Today;
     private Icon? _normalIcon;
@@ -27,36 +28,61 @@ public class Notifier
         _flashIcon = flashIcon;
     }
 
+    // Task.Run から呼ばれるためスレッドセーフ実装
     public void OnCaptured()
     {
-        if (DateTime.Today != _countDate)
+        int count;
+        lock (_countLock)
         {
-            _todayCount = 0;
-            _countDate = DateTime.Today;
+            if (DateTime.Today != _countDate)
+            {
+                _todayCount = 0;
+                _countDate = DateTime.Today;
+            }
+            count = ++_todayCount;
         }
-        _todayCount++;
 
         var cfg = _config.Config.Notification;
 
-        if (cfg.ShowCounter && _notifyIcon != null)
-            _notifyIcon.Text = $"AutoScreenshot - 本日 {_todayCount} 枚撮影";
+        // NotifyIcon は UI スレッドから操作する必要がある
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (cfg.ShowCounter && _notifyIcon != null)
+                _notifyIcon.Text = $"AutoScreenshot - 本日 {count} 枚撮影";
 
-        if (cfg.IconFlash && _notifyIcon != null)
-            FlashIcon();
+            if (cfg.IconFlash && _notifyIcon != null)
+                FlashIcon();
 
-        if (cfg.Toast)
-            ShowToast();
+            if (cfg.Toast)
+                ShowToast();
+        });
+    }
+
+    public void ShowDiskWarning(long freeMb)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (_notifyIcon == null) return;
+            _notifyIcon.ShowBalloonTip(5000, "AutoScreenshot - ディスク容量警告",
+                $"空き容量が少なくなっています: {freeMb}MB", ToolTipIcon.Warning);
+        });
     }
 
     private void FlashIcon()
     {
+        // 本メソッドは UI スレッドから呼ばれる前提
         if (_notifyIcon == null || _flashIcon == null) return;
 
         _notifyIcon.Icon = _flashIcon;
         _flashTimer?.Dispose();
         _flashTimer = new System.Threading.Timer(_ =>
         {
-            _notifyIcon.Icon = _normalIcon;
+            // タイマーコールバックはバックグラウンドスレッドのため UI スレッドに戻す
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                if (_notifyIcon != null)
+                    _notifyIcon.Icon = _normalIcon;
+            });
         }, null, 200, System.Threading.Timeout.Infinite);
     }
 
@@ -68,6 +94,9 @@ public class Notifier
 
     public void SetPausedState(bool paused, NotifyIcon icon)
     {
-        icon.Text = paused ? "AutoScreenshot [一時停止中]" : $"AutoScreenshot - 本日 {_todayCount} 枚撮影";
+        lock (_countLock)
+        {
+            icon.Text = paused ? "AutoScreenshot [一時停止中]" : $"AutoScreenshot - 本日 {_todayCount} 枚撮影";
+        }
     }
 }

@@ -8,12 +8,16 @@ public class FileStorage
 {
     private readonly ConfigStore _config;
     private string? _sessionId;
+    private Notifier? _notifier;
+    private DateTime _lastDiskWarning = DateTime.MinValue;
 
     public FileStorage(ConfigStore config)
     {
         _config = config;
         _sessionId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
     }
+
+    public void SetNotifier(Notifier notifier) => _notifier = notifier;
 
     public async Task<string> SaveAsync(byte[] imageData, ImageFormat format, TriggerEvent evt)
     {
@@ -70,7 +74,16 @@ public class FileStorage
             long threshold = _config.Config.Storage.LowDiskSpaceThresholdMb;
 
             if (freeMb < threshold)
+            {
                 Log.Warning("ディスク空き容量が少なくなっています: {Free}MB (しきい値: {Threshold}MB)", freeMb, threshold);
+
+                // トースト通知は 10 分に 1 回まで
+                if (_notifier != null && (DateTime.Now - _lastDiskWarning).TotalMinutes >= 10)
+                {
+                    _lastDiskWarning = DateTime.Now;
+                    _notifier.ShowDiskWarning(freeMb);
+                }
+            }
         }
         catch (Exception ex)
         {
