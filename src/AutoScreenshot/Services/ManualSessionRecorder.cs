@@ -9,7 +9,8 @@ public class ManualSessionRecorder
     private readonly ConfigStore _config;
     private readonly UiaService _uia;
     private readonly OcrService _ocr;
-    private readonly MarkdownManualWriter _mdWriter = new();
+    private readonly MarkdownManualWriter _mdWriter   = new();
+    private readonly DocxManualWriter     _docxWriter = new();
 
     private ManualSession? _current;
     private readonly object _lock = new();
@@ -174,8 +175,11 @@ public class ManualSessionRecorder
 
         try
         {
+            int gap = cfg.ChapterTimeGapMinutes;
             if (cfg.OutputMarkdown)
-                await _mdWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".md"));
+                await _mdWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".md"), gap);
+            if (cfg.OutputDocx)
+                await _docxWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".docx"), gap);
         }
         catch (Exception ex)
         {

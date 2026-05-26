@@ -248,7 +248,7 @@
 
                         <TextBlock Text="出力形式:" FontWeight="Bold" Margin="0,12,0,3"/>
                         <CheckBox x:Name="ChkOutputMarkdown" Content="Markdown (.md)" Margin="0,3"/>
-                        <CheckBox x:Name="ChkOutputDocx"     Content="Word (.docx)  ※フェーズ3で実装予定" Margin="0,3" IsEnabled="False"/>
+                        <CheckBox x:Name="ChkOutputDocx"     Content="Word (.docx)" Margin="0,3"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

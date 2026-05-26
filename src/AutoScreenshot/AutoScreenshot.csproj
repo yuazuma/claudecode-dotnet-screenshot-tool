@@ -28,6 +28,8 @@
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <!-- 手順書 Word docx 生成 -->
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.1.0" />
     <!-- UIAutomation (パスワード欄マスキング用) -->
     <PackageReference Include="UIAutomationClient" Version="*" Condition="false" />
   </ItemGroup>

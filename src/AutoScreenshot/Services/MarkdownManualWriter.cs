@@ -7,7 +7,7 @@ namespace AutoScreenshot.Services;
 /// <summary>ManualSession を Markdown ファイルに書き出す</summary>
 public class MarkdownManualWriter
 {
-    public async Task WriteAsync(ManualSession session, string outputPath)
+    public async Task WriteAsync(ManualSession session, string outputPath, int chapterTimeGapMinutes = 5)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         string outputDir = Path.GetDirectoryName(outputPath)!;
@@ -26,7 +26,7 @@ public class MarkdownManualWriter
         sb.AppendLine();
 
         // 目次（チャプター一覧）
-        var chapters = BuildChapters(session.Steps);
+        var chapters = BuildChapters(session.Steps, chapterTimeGapMinutes);
         if (chapters.Count > 0)
         {
             sb.AppendLine("## 目次");
@@ -46,6 +46,7 @@ public class MarkdownManualWriter
             var chapter = chapters[ci];
             sb.AppendLine($"## {ci + 1}. {chapter.WindowTitle}");
             sb.AppendLine();
+
 
             DateTime? lastStepTime = null;
             foreach (var step in chapter.Steps)
@@ -79,7 +80,7 @@ public class MarkdownManualWriter
         Log.Information("手順書 Markdown 出力完了: {Path}", outputPath);
     }
 
-    private static List<ChapterGroup> BuildChapters(List<ManualStep> steps)
+    private static List<ChapterGroup> BuildChapters(List<ManualStep> steps, int timeGapMinutes)
     {
         var result = new List<ChapterGroup>();
         ChapterGroup? current = null;
@@ -88,7 +89,7 @@ public class MarkdownManualWriter
         {
             if (current == null || step.TriggerType == TriggerType.ActiveWindowChange)
             {
-                current = new ChapterGroup { WindowTitle = step.WindowTitle };
+                current = new ChapterGroup { WindowTitle = step.WindowTitle, TimeGapMinutes = timeGapMinutes };
                 result.Add(current);
             }
             current.Steps.Add(step);
