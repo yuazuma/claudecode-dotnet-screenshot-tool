@@ -40,6 +40,20 @@
                         <CheckBox x:Name="ChkMouseMiddle" Content="中クリック" Margin="10,2"/>
                         <CheckBox x:Name="ChkMouseDrag"   Content="ドラッグ完了" Margin="10,2"/>
                         <CheckBox x:Name="ChkMouseWheel"  Content="ホイール操作" Margin="10,2"/>
+                        <StackPanel Orientation="Horizontal" Margin="20,3">
+                            <TextBlock Text="ドラッグ判定時間:" VerticalAlignment="Center" Width="120"/>
+                            <Slider x:Name="SldrDragThreshold" Minimum="50" Maximum="1000" Width="130"
+                                    TickFrequency="50" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrDragThreshold, Path=Value, StringFormat='{}{0}ms'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,3">
+                            <TextBlock Text="ホイールアイドル:" VerticalAlignment="Center" Width="120"/>
+                            <Slider x:Name="SldrWheelIdle" Minimum="100" Maximum="2000" Width="130"
+                                    TickFrequency="100" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrWheelIdle, Path=Value, StringFormat='{}{0}ms'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
 
                         <TextBlock Text="キーボード" FontWeight="Bold" Margin="0,10,0,3"/>
                         <CheckBox x:Name="ChkKeyboard" Content="キー入力後まとめ撮影" Margin="10,2"/>
@@ -82,9 +96,16 @@
                     </DockPanel>
                     <TextBlock Text="ファイル形式:" Margin="0,10,0,2"/>
                     <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="RdoPng"  Content="PNG" Margin="0,0,10,0" GroupName="Format"/>
-                        <RadioButton x:Name="RdoJpeg" Content="JPEG" Margin="0,0,10,0" GroupName="Format"/>
-                        <RadioButton x:Name="RdoWebP" Content="WebP" GroupName="Format"/>
+                        <RadioButton x:Name="RdoPng"  Content="PNG"  Margin="0,0,10,0" GroupName="Format" Checked="RdoFormat_Checked"/>
+                        <RadioButton x:Name="RdoJpeg" Content="JPEG" Margin="0,0,10,0" GroupName="Format" Checked="RdoFormat_Checked"/>
+                        <RadioButton x:Name="RdoWebP" Content="WebP"                   GroupName="Format" Checked="RdoFormat_Checked"/>
+                    </StackPanel>
+                    <StackPanel x:Name="PnlJpegQuality" Orientation="Horizontal" Margin="0,5" Visibility="Collapsed">
+                        <TextBlock Text="画質 (JPEG/WebP):" VerticalAlignment="Center" Width="130"/>
+                        <Slider x:Name="SldrJpegQuality" Minimum="60" Maximum="100" Width="130"
+                                TickFrequency="5" IsSnapToTickEnabled="True"/>
+                        <TextBlock Text="{Binding ElementName=SldrJpegQuality, Path=Value, StringFormat='{}{0}'}"
+                                   VerticalAlignment="Center" Margin="5,0"/>
                     </StackPanel>
                     <TextBlock Text="フォルダ命名規則:" Margin="0,10,0,2"/>
                     <ComboBox x:Name="CmbNaming" Width="300" HorizontalAlignment="Left">
@@ -115,6 +136,13 @@
                     <CheckBox x:Name="ChkSidecarLog" Content="撮影ごとにテキストログ (.log) を生成する" Margin="0,3"/>
                     <TextBlock Text="画像への情報付与:" FontWeight="Bold" Margin="0,15,0,5"/>
                     <CheckBox x:Name="ChkBurnTimestamp" Content="撮影日時を画像に焼き込む" Margin="0,3"/>
+                    <TextBlock Text="構造化ログ:" FontWeight="Bold" Margin="0,15,0,5"/>
+                    <CheckBox x:Name="ChkStructuredOutput" Content="JSONL/CSV 構造化ログを出力する" Margin="0,3"
+                              Checked="ChkStructuredOutput_Changed" Unchecked="ChkStructuredOutput_Changed"/>
+                    <StackPanel x:Name="PnlStructFmt" Orientation="Horizontal" Margin="20,5" IsEnabled="False">
+                        <RadioButton x:Name="RdoJsonLines" Content="JSON Lines (.jsonl)" GroupName="StructFmt" Margin="0,0,15,0"/>
+                        <RadioButton x:Name="RdoCsv"       Content="CSV (.csv)"           GroupName="StructFmt"/>
+                    </StackPanel>
                 </StackPanel>
             </TabItem>
 

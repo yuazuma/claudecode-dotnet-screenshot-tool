@@ -40,17 +40,26 @@ public partial class SettingsWindow : Window
         SldrKeyboardIdle.Value  = cfg.Triggers.KeyboardIdleSeconds;
         SldrDiffInterval.Value  = cfg.Triggers.ScreenDiffIntervalSeconds;
         SldrDiffThreshold.Value = cfg.Triggers.ScreenDiffThresholdPercent;
+        SldrDragThreshold.Value = cfg.Triggers.DragThresholdMs;
+        SldrWheelIdle.Value     = cfg.Triggers.WheelIdleMs;
 
         // 保存
         TxtSaveFolder.Text = cfg.Storage.SaveFolder;
         RdoPng.IsChecked   = cfg.Storage.ImageFormat == ImageFormat.Png;
         RdoJpeg.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.Jpeg;
         RdoWebP.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.WebP;
+        SldrJpegQuality.Value = cfg.Storage.JpegQuality;
+        PnlJpegQuality.Visibility = cfg.Storage.ImageFormat != ImageFormat.Png
+            ? Visibility.Visible : Visibility.Collapsed;
         CmbNaming.SelectedIndex = (int)cfg.Storage.FolderNaming;
 
         // メタデータ
         ChkSidecarLog.IsChecked    = cfg.Metadata.SidecarTextLog;
         ChkBurnTimestamp.IsChecked = cfg.Metadata.BurnTimestamp;
+        ChkStructuredOutput.IsChecked = cfg.Metadata.StructuredOutput;
+        RdoJsonLines.IsChecked = cfg.Metadata.StructuredFormat == StructuredFormat.JsonLines;
+        RdoCsv.IsChecked       = cfg.Metadata.StructuredFormat == StructuredFormat.Csv;
+        PnlStructFmt.IsEnabled = cfg.Metadata.StructuredOutput;
 
         // プライバシー
         ChkMaskPassword.IsChecked = cfg.Privacy.MaskPasswordFields;
@@ -84,15 +93,21 @@ public partial class SettingsWindow : Window
             cfg.Triggers.KeyboardIdleSeconds        = SldrKeyboardIdle.Value;
             cfg.Triggers.ScreenDiffIntervalSeconds  = (int)SldrDiffInterval.Value;
             cfg.Triggers.ScreenDiffThresholdPercent = SldrDiffThreshold.Value;
+            cfg.Triggers.DragThresholdMs            = (int)SldrDragThreshold.Value;
+            cfg.Triggers.WheelIdleMs                = (int)SldrWheelIdle.Value;
 
             cfg.Storage.SaveFolder  = TxtSaveFolder.Text;
             cfg.Storage.ImageFormat = RdoJpeg.IsChecked == true ? ImageFormat.Jpeg
                                     : RdoWebP.IsChecked == true ? ImageFormat.WebP
                                     : ImageFormat.Png;
+            cfg.Storage.JpegQuality  = (int)SldrJpegQuality.Value;
             cfg.Storage.FolderNaming = (FolderNamingRule)CmbNaming.SelectedIndex;
 
-            cfg.Metadata.SidecarTextLog = ChkSidecarLog.IsChecked == true;
-            cfg.Metadata.BurnTimestamp  = ChkBurnTimestamp.IsChecked == true;
+            cfg.Metadata.SidecarTextLog    = ChkSidecarLog.IsChecked == true;
+            cfg.Metadata.BurnTimestamp     = ChkBurnTimestamp.IsChecked == true;
+            cfg.Metadata.StructuredOutput  = ChkStructuredOutput.IsChecked == true;
+            cfg.Metadata.StructuredFormat  = RdoCsv.IsChecked == true
+                                           ? StructuredFormat.Csv : StructuredFormat.JsonLines;
 
             cfg.Privacy.MaskPasswordFields = ChkMaskPassword.IsChecked == true;
             cfg.Privacy.ExcludeApps = TxtExcludeApps.Text
@@ -110,6 +125,21 @@ public partial class SettingsWindow : Window
             AutoStartService.Enable();
         else if (!autoStart && AutoStartService.IsEnabled())
             AutoStartService.Disable();
+    }
+
+    // --- フォーマット選択 ---
+
+    private void RdoFormat_Checked(object sender, RoutedEventArgs e)
+    {
+        if (PnlJpegQuality == null) return;
+        PnlJpegQuality.Visibility = (RdoPng.IsChecked == true)
+            ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void ChkStructuredOutput_Changed(object sender, RoutedEventArgs e)
+    {
+        if (PnlStructFmt == null) return;
+        PnlStructFmt.IsEnabled = ChkStructuredOutput.IsChecked == true;
     }
 
     // --- ホットキー入力処理 ---

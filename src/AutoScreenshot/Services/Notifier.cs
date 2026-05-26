@@ -13,6 +13,7 @@ public class Notifier
     private DateTime _countDate = DateTime.Today;
     private Icon? _normalIcon;
     private Icon? _flashIcon;
+    private System.Threading.Timer? _flashTimer;
 
     public Notifier(ConfigStore config)
     {
@@ -52,7 +53,8 @@ public class Notifier
         if (_notifyIcon == null || _flashIcon == null) return;
 
         _notifyIcon.Icon = _flashIcon;
-        var timer = new System.Threading.Timer(_ =>
+        _flashTimer?.Dispose();
+        _flashTimer = new System.Threading.Timer(_ =>
         {
             _notifyIcon.Icon = _normalIcon;
         }, null, 200, System.Threading.Timeout.Infinite);
