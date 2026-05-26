@@ -169,6 +169,7 @@ public class TriggerOrchestrator : IDisposable
                 var cfg = _config.Config;
 
                 string? firstMonitorPath = null;
+                System.Drawing.Rectangle firstMonitorBounds = default;
                 var now = DateTime.Now;
                 foreach (var (bmp, monitorIdx, bounds) in screenshots)
                 {
@@ -193,14 +194,18 @@ public class TriggerOrchestrator : IDisposable
                     if (cfg.Metadata.SidecarTextLog)
                         await _logger.LogEventAsync(evt, path);
 
-                    firstMonitorPath ??= path;
+                    if (firstMonitorPath == null)
+                    {
+                        firstMonitorPath = path;
+                        firstMonitorBounds = bounds;
+                    }
                 }
 
                 // 手順書にステップを記録（プライマリモニターのパスのみ）
                 if (_manualRecorder != null && firstMonitorPath != null)
                 {
                     var stepEvt = new TriggerEvent(trigger, now, cursorPos, title, procName, 0);
-                    _manualRecorder.RecordStep(stepEvt, firstMonitorPath);
+                    await _manualRecorder.RecordStepAsync(stepEvt, firstMonitorPath, firstMonitorBounds);
                 }
 
                 _notifier.OnCaptured();

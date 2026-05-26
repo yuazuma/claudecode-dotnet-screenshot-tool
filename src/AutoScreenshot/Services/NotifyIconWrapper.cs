@@ -42,7 +42,7 @@ public class NotifyIconWrapper : IDisposable
         _masking = new MaskingService();
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
-        _manualRecorder = new ManualSessionRecorder(_config);
+        _manualRecorder = new ManualSessionRecorder(_config, new UiaService(), new OcrService());
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
             _manualRecorder);

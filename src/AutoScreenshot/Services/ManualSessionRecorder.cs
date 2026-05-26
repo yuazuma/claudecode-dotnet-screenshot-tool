@@ -7,14 +7,18 @@ namespace AutoScreenshot.Services;
 public class ManualSessionRecorder
 {
     private readonly ConfigStore _config;
+    private readonly UiaService _uia;
+    private readonly OcrService _ocr;
     private readonly MarkdownManualWriter _mdWriter = new();
 
     private ManualSession? _current;
     private readonly object _lock = new();
 
-    public ManualSessionRecorder(ConfigStore config)
+    public ManualSessionRecorder(ConfigStore config, UiaService uia, OcrService ocr)
     {
         _config = config;
+        _uia = uia;
+        _ocr = ocr;
     }
 
     /// <summary>新しいセッションを開始する。title が空なら既定タイトルを使用する。</summary>
@@ -33,13 +37,35 @@ public class ManualSessionRecorder
     }
 
     /// <summary>TriggerOrchestrator から呼ばれる。イベントとスクリーンショットパスを記録する。</summary>
-    public void RecordStep(TriggerEvent evt, string? imagePath)
+    public async Task RecordStepAsync(TriggerEvent evt, string? imagePath, System.Drawing.Rectangle monitorBounds)
     {
         var cfg = _config.Config.ManualGen;
         if (!cfg.Enabled) return;
 
         // E-05: 差分検知と手動撮影は記録しない
         if (evt.Type is TriggerType.ScreenDiff or TriggerType.ManualCapture) return;
+
+        lock (_lock) { if (_current == null) return; }
+
+        // UIA / OCR は lock 外で非同期実行 (U-01〜U-04)
+        string? uiName = null;
+        string? ctrlType = null;
+        bool needsReview = false;
+
+        if (evt.Type != TriggerType.ActiveWindowChange)
+        {
+            // キーボードはフォーカス要素、それ以外はカーソル位置の要素
+            (uiName, ctrlType) = evt.Type == TriggerType.Keyboard
+                ? await _uia.GetFocusedElementAsync()
+                : await _uia.GetElementAtAsync(evt.CursorPosition);
+
+            // UIA 失敗 → OCR フォールバック (U-02)
+            if (uiName == null && imagePath != null)
+                uiName = await _ocr.RecognizeNearbyTextAsync(imagePath, evt.CursorPosition, monitorBounds);
+
+            // 両方失敗 → 要レビューマーク (U-03)
+            needsReview = uiName == null;
+        }
 
         lock (_lock)
         {
@@ -55,15 +81,16 @@ public class ManualSessionRecorder
 
             var step = new ManualStep
             {
-                StepNumber      = _current.Steps.Count + 1,
-                Timestamp       = evt.Timestamp,
-                TriggerType     = evt.Type,
-                CursorPosition  = evt.CursorPosition,
-                WindowTitle     = evt.ActiveWindowTitle,
-                ProcessName     = evt.ActiveProcessName,
-                ImagePath       = includeImage ? imagePath : null,
-                // Phase 2 で UIA/OCR を追加: UiElementName / UiControlType は null のまま
-                NeedsReview     = false,
+                StepNumber     = _current.Steps.Count + 1,
+                Timestamp      = evt.Timestamp,
+                TriggerType    = evt.Type,
+                UiElementName  = uiName,
+                UiControlType  = ctrlType,
+                CursorPosition = evt.CursorPosition,
+                WindowTitle    = evt.ActiveWindowTitle,
+                ProcessName    = evt.ActiveProcessName,
+                ImagePath      = includeImage ? imagePath : null,
+                NeedsReview    = needsReview,
             };
 
             step.DescriptionRuleBased = RuleBasedDescriber.Describe(step);
