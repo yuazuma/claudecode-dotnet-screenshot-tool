@@ -60,19 +60,22 @@ public class TriggerOrchestrator : IDisposable
         if (_paused) return;
         var cfg = _config.Config.Triggers;
 
-        bool enabled = triggerType switch
+        // トリガー有効チェック + クールダウン値の決定
+        (bool enabled, double cooldown) = triggerType switch
         {
-            TriggerType.MouseLeftClick  => cfg.MouseLeftClick,
-            TriggerType.MouseRightClick => cfg.MouseRightClick,
-            TriggerType.MouseMiddleClick => cfg.MouseMiddleClick,
-            TriggerType.MouseWheel       => cfg.MouseWheel,
-            _ => false,
+            TriggerType.MouseLeftClick   => (cfg.MouseLeftClick,   cfg.CooldownMouseClick),
+            TriggerType.MouseRightClick  => (cfg.MouseRightClick,  cfg.CooldownMouseClick),
+            TriggerType.MouseMiddleClick => (cfg.MouseMiddleClick, cfg.CooldownMouseClick),
+            TriggerType.MouseDragDrop    => (cfg.MouseDragDrop,    cfg.CooldownMouseDragDrop),
+            TriggerType.MouseWheel       => (cfg.MouseWheel,       cfg.CooldownMouseWheel),
+            _ => (false, 0),
         };
 
         if (!enabled) return;
-        if (!CheckCooldown(triggerType, cfg.CooldownMouseClick)) return;
+        if (!CheckCooldown(triggerType, cooldown)) return;
         if (IsExcludedApp()) return;
 
+        Log.Debug("TriggerOrchestrator: 撮影キュー投入 ({Trigger})", triggerType);
         FireCapture(triggerType);
     }
 

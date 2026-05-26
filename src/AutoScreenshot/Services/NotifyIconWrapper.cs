@@ -30,7 +30,7 @@ public class NotifyIconWrapper : IDisposable
         _config = new ConfigStore();
         _config.Load();
 
-        _hook = new HookService();
+        _hook = new HookService(() => _config.Config.Triggers);
         _capture = new CaptureService();
         _diffDetector = new DiffDetector(_capture);
         _storage = new FileStorage(_config);

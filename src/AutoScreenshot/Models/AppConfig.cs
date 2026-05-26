@@ -36,6 +36,7 @@ public class TriggerConfig
 
     // クールダウン (秒)
     public double CooldownMouseClick { get; set; } = 1.0;
+    public double CooldownMouseDragDrop { get; set; } = 0.5;
     public double CooldownMouseWheel { get; set; } = 2.0;
     public double CooldownKeyboard { get; set; } = 2.0;
     public double CooldownActiveWindow { get; set; } = 1.0;
@@ -43,6 +44,12 @@ public class TriggerConfig
 
     // キーボードアイドル待機 (秒)
     public double KeyboardIdleSeconds { get; set; } = 2.0;
+
+    // ドラッグ判定閾値 (ミリ秒): DOWN→UP がこれ以上離れていればドラッグとみなす
+    public int DragThresholdMs { get; set; } = 200;
+
+    // ホイールアイドル待機 (ミリ秒): 最終ホイールイベントからこの時間経過後に1枚撮影
+    public int WheelIdleMs { get; set; } = 500;
 
     // 画面差分
     public int ScreenDiffIntervalSeconds { get; set; } = 3;
