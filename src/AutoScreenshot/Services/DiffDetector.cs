@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Windows.Forms;
+using Serilog;
 
 namespace AutoScreenshot.Services;
 
@@ -9,6 +10,7 @@ public class DiffDetector : IDisposable
 {
     private readonly CaptureService _captureService;
     private readonly Dictionary<int, Bitmap> _prevThumbs = [];
+    private readonly object _lock = new();
 
     public DiffDetector(CaptureService captureService)
     {
@@ -16,7 +18,7 @@ public class DiffDetector : IDisposable
     }
 
     /// <summary>
-    /// 全モニタを走査し、差分率が閾値を超えたモニタのインデックスリストを返す
+    /// 全モニタを走査し、差分率が閾値を超えたモニタのインデックスリスト (0始まり) を返す
     /// </summary>
     public List<int> DetectChangedScreens(double thresholdPercent)
     {
@@ -27,23 +29,30 @@ public class DiffDetector : IDisposable
         {
             var thumb = _captureService.CaptureThumbnail(screens[i].Bounds);
 
-            if (_prevThumbs.TryGetValue(i, out var prev))
+            lock (_lock)
             {
-                double diff = CalcDiffRatio(prev, thumb);
-                if (diff >= thresholdPercent / 100.0)
+                if (_prevThumbs.TryGetValue(i, out var prev))
                 {
-                    changed.Add(i);
-                    prev.Dispose();
-                    _prevThumbs[i] = thumb;
+                    double diff = CalcDiffRatio(prev, thumb);
+
+                    if (diff >= thresholdPercent / 100.0)
+                    {
+                        Log.Debug("差分検知: モニタ{Idx} diff={Ratio:P1} (閾値={Threshold:P1})",
+                            i, diff, thresholdPercent / 100.0);
+                        changed.Add(i);
+                        prev.Dispose();
+                        _prevThumbs[i] = thumb;
+                    }
+                    else
+                    {
+                        thumb.Dispose();
+                    }
                 }
                 else
                 {
-                    thumb.Dispose();
+                    // 初回はベースラインとして保存するだけ
+                    _prevThumbs[i] = thumb;
                 }
-            }
-            else
-            {
-                _prevThumbs[i] = thumb;
             }
         }
 
@@ -82,8 +91,11 @@ public class DiffDetector : IDisposable
 
     public void Dispose()
     {
-        foreach (var bmp in _prevThumbs.Values)
-            bmp.Dispose();
-        _prevThumbs.Clear();
+        lock (_lock)
+        {
+            foreach (var bmp in _prevThumbs.Values)
+                bmp.Dispose();
+            _prevThumbs.Clear();
+        }
     }
 }

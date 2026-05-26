@@ -20,7 +20,9 @@ public class TriggerOrchestrator : IDisposable
     private bool _paused;
     private readonly Dictionary<TriggerType, DateTime> _lastCapture = [];
     private readonly System.Threading.Timer _diffTimer;
+    private int _diffIntervalMs;
     private DateTime _lastKeyboardActivity = DateTime.MinValue;
+    private DateTime _lastMouseActivity = DateTime.MinValue;
     private System.Threading.Timer? _keyboardIdleTimer;
 
     public TriggerOrchestrator(
@@ -40,8 +42,10 @@ public class TriggerOrchestrator : IDisposable
         _hook.KeyboardActivity += OnKeyboardActivity;
         _hook.ActiveWindowChanged += OnActiveWindowChanged;
 
-        int interval = (int)(_config.Config.Triggers.ScreenDiffIntervalSeconds * 1000);
-        _diffTimer = new System.Threading.Timer(OnDiffTimer, null, interval, interval);
+        _diffIntervalMs = (int)(_config.Config.Triggers.ScreenDiffIntervalSeconds * 1000);
+        _diffTimer = new System.Threading.Timer(OnDiffTimer, null, _diffIntervalMs, _diffIntervalMs);
+
+        _config.ConfigChanged += OnConfigChanged;
     }
 
     public void SetPaused(bool paused)
@@ -55,9 +59,21 @@ public class TriggerOrchestrator : IDisposable
         FireCapture(TriggerType.ManualCapture);
     }
 
+    private void OnConfigChanged(object? sender, EventArgs e)
+    {
+        int newMs = (int)(_config.Config.Triggers.ScreenDiffIntervalSeconds * 1000);
+        if (newMs != _diffIntervalMs)
+        {
+            _diffIntervalMs = newMs;
+            _diffTimer.Change(_diffIntervalMs, _diffIntervalMs);
+            Log.Information("差分検知タイマー間隔を更新: {Interval}ms", _diffIntervalMs);
+        }
+    }
+
     private void OnMouseEvent(object? sender, TriggerType triggerType)
     {
         if (_paused) return;
+        _lastMouseActivity = DateTime.UtcNow;
         var cfg = _config.Config.Triggers;
 
         // トリガー有効チェック + クールダウン値の決定
@@ -111,16 +127,19 @@ public class TriggerOrchestrator : IDisposable
 
             double threshold = _config.Config.Triggers.ScreenDiffThresholdPercent;
             var changedScreens = _diffDetector.DetectChangedScreens(threshold);
-            Log.Debug("差分チェック: 変化モニタ数={Count}", changedScreens.Count);
             if (changedScreens.Count == 0) return;
+
+            Log.Debug("差分チェック: 変化モニタ数={Count} ({Indices})",
+                changedScreens.Count, string.Join(",", changedScreens));
 
             if (!CheckCooldown(TriggerType.ScreenDiff, _config.Config.Triggers.CooldownScreenDiff)) return;
             if (IsExcludedApp()) return;
 
-            // キーボード・マウス直後の差分は除外
+            // マウス・キーボード直後 (1秒以内) の差分はトリガーイベント起因とみなして除外
             if ((DateTime.UtcNow - _lastKeyboardActivity).TotalSeconds < 1.0) return;
+            if ((DateTime.UtcNow - _lastMouseActivity).TotalSeconds < 1.0) return;
 
-            FireCapture(TriggerType.ScreenDiff);
+            FireCapture(TriggerType.ScreenDiff, changedScreens);
         }
         catch (Exception ex)
         {
@@ -128,7 +147,7 @@ public class TriggerOrchestrator : IDisposable
         }
     }
 
-    private void FireCapture(TriggerType trigger)
+    private void FireCapture(TriggerType trigger, IReadOnlyList<int>? screenIndices = null)
     {
         Task.Run(async () =>
         {
@@ -139,7 +158,9 @@ public class TriggerOrchestrator : IDisposable
                 string title = GetActiveWindowTitle();
                 string procName = GetActiveProcessName();
 
-                var screenshots = _capture.CaptureAllScreens();
+                var screenshots = screenIndices != null
+                    ? _capture.CaptureScreensByIndex(screenIndices)
+                    : _capture.CaptureAllScreens();
                 var cfg = _config.Config;
 
                 foreach (var (bmp, monitorIdx, _) in screenshots)
@@ -224,6 +245,7 @@ public class TriggerOrchestrator : IDisposable
 
     public void Dispose()
     {
+        _config.ConfigChanged -= OnConfigChanged;
         _diffTimer.Dispose();
         _keyboardIdleTimer?.Dispose();
         _hook.MouseEvent -= OnMouseEvent;

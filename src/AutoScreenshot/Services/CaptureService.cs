@@ -25,6 +25,23 @@ public class CaptureService
         return results;
     }
 
+    /// <summary>指定した 0 始まりインデックスのモニタのみ撮影する</summary>
+    public List<(Bitmap Image, int MonitorIndex, Rectangle Bounds)> CaptureScreensByIndex(IReadOnlyList<int> zeroBasedIndices)
+    {
+        var results = new List<(Bitmap, int, Rectangle)>();
+        var screens = Screen.AllScreens;
+
+        foreach (int i in zeroBasedIndices)
+        {
+            if (i < 0 || i >= screens.Length) continue;
+            var screen = screens[i];
+            var bmp = CaptureScreen(screen.Bounds);
+            results.Add((bmp, i + 1, screen.Bounds));
+        }
+
+        return results;
+    }
+
     /// <summary>指定領域をキャプチャする</summary>
     public Bitmap CaptureScreen(Rectangle bounds)
     {
