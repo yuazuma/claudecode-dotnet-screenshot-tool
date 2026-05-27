@@ -6,6 +6,43 @@
 
 ---
 
+## [Unreleased] — v1.2.0
+
+> 詳細要件: `requirements/追加要件_プロジェクトファイル.md`
+
+### Added（追加）
+
+- **プロジェクトファイル機能** — ManualSession 単位の `.ascproj/` フォルダによる記録管理
+  - `Models/ProjectConfig.cs`: プロジェクト機能設定モデル（有効化・サムネイルサイズ・自動エクスポート設定）
+  - `Models/ProjectInfo.cs`: project.json のデシリアライズ対象クラス（ProjectId / Steps / ExportHistory 等）
+  - `Services/ProjectStore.cs`: プロジェクトフォルダの作成・project.json 読み書き・一覧取得
+  - `Services/ThumbnailService.cs`: サムネイル生成（JPEG・最大 320px・非同期）
+  - `Services/ExportService.cs`: エクスポート統括（画像 / 手順書 / 動画 / ZIP を一元管理）
+  - `Views/ProjectViewWindow.xaml`: プロジェクトビューウィンドウ（900×600px・リサイズ可能）
+  - `AppConfig.Project` プロパティ追加（`ProjectConfig`）
+  - 設定ウィンドウに「プロジェクト」タブ追加（10タブ目）
+  - トレイメニューを再構成:「プロジェクト区切り」「エクスポート >（サブメニュー）」「プロジェクトを管理...」
+
+- **エクスポート機能**
+  - 個別画像エクスポート（PNG / JPEG）
+  - 手順書エクスポート（Markdown / Word）
+  - 動画エクスポート（APNG / MP4）—バックグラウンド実行
+  - ZIP アーカイブエクスポート（ファイル保存ダイアログ）
+
+- **プロジェクト内ステップ編集**
+  - ステップ削除（`images/_deleted/` に移動・物理削除なし）
+  - 説明文の手修正（`descriptionOverride` フィールド）
+
+### Changed（変更）
+
+- バージョン: 1.1.0 → 1.2.0
+- `FileStorage`: 画像保存先を `{SaveFolder}/{date}/` から `{project}/images/` に変更
+- `ManualSessionRecorder`: ProjectStore と連携してプロジェクトを自動作成・更新
+- `NotifyIconWrapper`: トレイメニューを v1.2.0 構成に変更
+- `MarkdownManualWriter` / `DocxManualWriter` / `VideoGenerator`: 入力ソースを ManualSession → ProjectInfo に対応
+
+---
+
 ## [1.1.0] — 2026-05-27
 
 ### Added（追加）
@@ -78,5 +115,6 @@
 
 ---
 
+*[Unreleased]: https://github.com/your-org/AutoScreenshot/compare/v1.1.0...HEAD*
 *[1.1.0]: https://github.com/your-org/AutoScreenshot/compare/v1.0.0...v1.1.0*
 *[1.0.0]: https://github.com/your-org/AutoScreenshot/releases/tag/v1.0.0*
