@@ -96,6 +96,39 @@ public partial class SettingsWindow : Window
         PwdLlmEndpoint.Password       = DpapiHelper.Unprotect(cfg.ManualGen.LlmEndpoint);
         PwdLlmApiKey.Password         = DpapiHelper.Unprotect(cfg.ManualGen.LlmApiKey);
         TxtLlmDeploymentName.Text     = cfg.ManualGen.LlmDeploymentName;
+
+        // 動画生成
+        var vc = cfg.VideoGen;
+        ChkVideoApng.IsChecked          = vc.OutputApng;
+        ChkVideoMp4.IsChecked           = vc.OutputMp4;
+        TxtVideoFolder.Text             = vc.VideoOutputFolder;
+        RdoVideoSession.IsChecked       = vc.VideoUnit == VideoUnit.Session;
+        RdoVideoChapter.IsChecked       = vc.VideoUnit == VideoUnit.Chapter;
+        RdoFrameFixed.IsChecked         = vc.FrameTimingMode == FrameTimingMode.Fixed;
+        RdoFrameRealTime.IsChecked      = vc.FrameTimingMode == FrameTimingMode.RealTime;
+        TxtFixedFrameSec.Text           = vc.FixedFrameSeconds.ToString();
+        TxtMinFrameSec.Text             = vc.MinFrameSeconds.ToString();
+        TxtMaxFrameSec.Text             = vc.MaxFrameSeconds.ToString();
+        RdoResOriginal.IsChecked        = vc.OutputResolution == VideoResolution.Original;
+        RdoResFhd.IsChecked             = vc.OutputResolution == VideoResolution.Fhd;
+        RdoResHd.IsChecked              = vc.OutputResolution == VideoResolution.Hd;
+        TxtMp4Bitrate.Text              = vc.Mp4VideoBitrateMbps.ToString();
+        ChkDrawRipple.IsChecked         = vc.DrawRipple;
+        ChkDrawRectangle.IsChecked      = vc.DrawRectangle;
+        ChkShowTelop.IsChecked          = vc.ShowTelop;
+        ChkTelopEventLabel.IsChecked    = vc.TelopShowEventLabel;
+        ChkTelopInputText.IsChecked     = vc.TelopShowInputText;
+        ChkTelopDescription.IsChecked   = vc.TelopShowDescription;
+        ChkTelopTimestamp.IsChecked     = vc.TelopShowTimestamp;
+        TxtTelopFontSize.Text           = vc.TelopFontSize.ToString();
+        TxtTelopBgAlpha.Text            = vc.TelopBgAlpha.ToString();
+        ChkTtsEnabled.IsChecked         = vc.TtsEnabled;
+        TxtTtsVoice.Text                = vc.TtsVoice;
+        TxtTtsRate.Text                 = vc.TtsRate.ToString();
+        TxtTtsVolume.Text               = vc.TtsVolume.ToString();
+        ChkAutoGenerateVideo.IsChecked  = vc.AutoGenerateWithManual;
+        ChkOpenFolderOnComplete.IsChecked = vc.OpenFolderOnComplete;
+        UpdateFrameTimingPanels();
     }
 
     private void ApplySettings()
@@ -169,6 +202,35 @@ public partial class SettingsWindow : Window
             cfg.ManualGen.LlmEndpoint       = DpapiHelper.Protect(PwdLlmEndpoint.Password);
             cfg.ManualGen.LlmApiKey         = DpapiHelper.Protect(PwdLlmApiKey.Password);
             cfg.ManualGen.LlmDeploymentName = TxtLlmDeploymentName.Text.Trim();
+
+            // 動画生成
+            cfg.VideoGen.OutputApng          = ChkVideoApng.IsChecked == true;
+            cfg.VideoGen.OutputMp4           = ChkVideoMp4.IsChecked == true;
+            cfg.VideoGen.VideoOutputFolder   = TxtVideoFolder.Text.Trim();
+            cfg.VideoGen.VideoUnit           = RdoVideoChapter.IsChecked == true ? VideoUnit.Chapter : VideoUnit.Session;
+            cfg.VideoGen.FrameTimingMode     = RdoFrameRealTime.IsChecked == true ? FrameTimingMode.RealTime : FrameTimingMode.Fixed;
+            cfg.VideoGen.FixedFrameSeconds   = double.TryParse(TxtFixedFrameSec.Text, out double f) ? f : 3.0;
+            cfg.VideoGen.MinFrameSeconds     = double.TryParse(TxtMinFrameSec.Text,   out double mn) ? mn : 1.0;
+            cfg.VideoGen.MaxFrameSeconds     = double.TryParse(TxtMaxFrameSec.Text,   out double mx) ? mx : 10.0;
+            cfg.VideoGen.OutputResolution    = RdoResFhd.IsChecked == true ? VideoResolution.Fhd
+                                             : RdoResHd.IsChecked  == true ? VideoResolution.Hd
+                                             : VideoResolution.Original;
+            cfg.VideoGen.Mp4VideoBitrateMbps = int.TryParse(TxtMp4Bitrate.Text, out int br) ? br : 4;
+            cfg.VideoGen.DrawRipple          = ChkDrawRipple.IsChecked == true;
+            cfg.VideoGen.DrawRectangle       = ChkDrawRectangle.IsChecked == true;
+            cfg.VideoGen.ShowTelop           = ChkShowTelop.IsChecked == true;
+            cfg.VideoGen.TelopShowEventLabel = ChkTelopEventLabel.IsChecked == true;
+            cfg.VideoGen.TelopShowInputText  = ChkTelopInputText.IsChecked == true;
+            cfg.VideoGen.TelopShowDescription = ChkTelopDescription.IsChecked == true;
+            cfg.VideoGen.TelopShowTimestamp  = ChkTelopTimestamp.IsChecked == true;
+            cfg.VideoGen.TelopFontSize       = int.TryParse(TxtTelopFontSize.Text,  out int fs) ? fs : 16;
+            cfg.VideoGen.TelopBgAlpha        = byte.TryParse(TxtTelopBgAlpha.Text,  out byte ba) ? ba : (byte)160;
+            cfg.VideoGen.TtsEnabled          = ChkTtsEnabled.IsChecked == true;
+            cfg.VideoGen.TtsVoice            = TxtTtsVoice.Text.Trim();
+            cfg.VideoGen.TtsRate             = int.TryParse(TxtTtsRate.Text,   out int tr) ? Math.Clamp(tr, -10, 10) : 0;
+            cfg.VideoGen.TtsVolume           = int.TryParse(TxtTtsVolume.Text, out int tv) ? Math.Clamp(tv, 0, 100) : 100;
+            cfg.VideoGen.AutoGenerateWithManual  = ChkAutoGenerateVideo.IsChecked == true;
+            cfg.VideoGen.OpenFolderOnComplete    = ChkOpenFolderOnComplete.IsChecked == true;
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 
@@ -295,5 +357,29 @@ public partial class SettingsWindow : Window
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             TxtTemplateDotxPath.Text = dialog.FileName;
+    }
+
+    // --- 動画生成タブ ---
+
+    private void BtnVideoFolderBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            SelectedPath = TxtVideoFolder.Text,
+            Description  = "動画の出力先フォルダを選択してください"
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            TxtVideoFolder.Text = dialog.SelectedPath;
+    }
+
+    private void RdoFrameTiming_Changed(object sender, RoutedEventArgs e)
+        => UpdateFrameTimingPanels();
+
+    private void UpdateFrameTimingPanels()
+    {
+        if (PnlFixedFrame == null || PnlRealTimeFrame == null) return;
+        bool isFixed = RdoFrameFixed.IsChecked == true;
+        PnlFixedFrame.Visibility    = isFixed ? Visibility.Visible : Visibility.Collapsed;
+        PnlRealTimeFrame.Visibility = isFixed ? Visibility.Collapsed : Visibility.Visible;
     }
 }

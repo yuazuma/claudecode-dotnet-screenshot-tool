@@ -12,6 +12,7 @@ public class ManualSessionRecorder
     private readonly Notifier? _notifier;
     private readonly MarkdownManualWriter _mdWriter   = new();
     private readonly DocxManualWriter     _docxWriter = new();
+    private VideoGenerator? _videoGenerator;
 
     private ManualSession? _current;
     private readonly object _lock = new();
@@ -23,6 +24,9 @@ public class ManualSessionRecorder
         _ocr      = ocr;
         _notifier = notifier;
     }
+
+    /// <summary>VideoGenerator を設定する（NotifyIconWrapper から呼ぶ）。</summary>
+    public void SetVideoGenerator(VideoGenerator generator) => _videoGenerator = generator;
 
     /// <summary>新しいセッションを開始する。title が空なら既定タイトルを使用する。</summary>
     public void StartSession(string title = "")
@@ -142,6 +146,19 @@ public class ManualSessionRecorder
         });
     }
 
+    /// <summary>現セッションのスナップショットから動画を手動生成する（FR-V07-2）。</summary>
+    public void GenerateVideoNow(VideoGenerator generator)
+    {
+        ManualSession? snapshot;
+        lock (_lock)
+        {
+            if (_current == null) return;
+            snapshot = new ManualSession { Title = _current.Title, EndedAt = DateTime.Now };
+            snapshot.Steps.AddRange(_current.Steps);
+        }
+        _ = generator.GenerateAsync(snapshot);
+    }
+
     /// <summary>現セッションのスナップショットを保存する（セッションは継続）。</summary>
     public void GenerateNow()
     {
@@ -235,6 +252,10 @@ public class ManualSessionRecorder
 
             // NF-03: 手順書生成完了をトースト通知
             _notifier?.ShowManualGeneratedToast(llmUsed);
+
+            // FR-V07-1: 手順書生成と同時に動画を自動生成するオプション
+            if (_config.Config.VideoGen.AutoGenerateWithManual && _videoGenerator != null)
+                _ = _videoGenerator.GenerateAsync(session);
         }
         catch (Exception ex)
         {

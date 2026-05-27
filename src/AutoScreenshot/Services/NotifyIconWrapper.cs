@@ -24,6 +24,7 @@ public class NotifyIconWrapper : IDisposable
     private readonly HotkeyService _hotkeyService;
     private readonly ManualSessionRecorder _manualRecorder;
     private readonly TriggerOrchestrator _orchestrator;
+    private readonly VideoGenerator _videoGenerator;
 
     private bool _paused;
     private ToolStripMenuItem? _pauseItem;
@@ -43,6 +44,8 @@ public class NotifyIconWrapper : IDisposable
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
         _manualRecorder = new ManualSessionRecorder(_config, new UiaService(), new OcrService(), _notifier);
+        _videoGenerator = new VideoGenerator(_config, _notifier);
+        _manualRecorder.SetVideoGenerator(_videoGenerator);
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
             _manualRecorder);
@@ -140,10 +143,13 @@ public class NotifyIconWrapper : IDisposable
         var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
         generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
 
+        var generateVideoItem = new ToolStripMenuItem("動画を生成");
+        generateVideoItem.Click += (_, _) => _manualRecorder.GenerateVideoNow(_videoGenerator);
+
         var versionItem = new ToolStripMenuItem("バージョン情報");
         versionItem.Click += (_, _) =>
             System.Windows.MessageBox.Show(
-                "AutoScreenshot v1.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影ツール",
+                "AutoScreenshot v1.1.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
                 "バージョン情報",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);
@@ -154,7 +160,7 @@ public class NotifyIconWrapper : IDisposable
         menu.Items.AddRange([
             _pauseItem, openFolderItem, new ToolStripSeparator(),
             settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
-            sessionSplitItem, generateNowItem, new ToolStripSeparator(),
+            sessionSplitItem, generateNowItem, generateVideoItem, new ToolStripSeparator(),
             versionItem, new ToolStripSeparator(),
             exitItem
         ]);

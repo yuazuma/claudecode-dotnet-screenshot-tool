@@ -24,6 +24,9 @@ public class AppConfig
 
     // --- 手順書生成 ---
     public ManualGenConfig ManualGen { get; set; } = new();
+
+    // --- 動画生成 ---
+    public VideoGenConfig VideoGen { get; set; } = new();
 }
 
 public class TriggerConfig

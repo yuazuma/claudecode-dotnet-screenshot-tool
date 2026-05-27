@@ -12,9 +12,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>AutoScreenshot</AssemblyName>
     <RootNamespace>AutoScreenshot</RootNamespace>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <Product>AutoScreenshot</Product>
     <Company>AutoScreenshot</Company>
     <Description>業務作業証跡の自動スクリーンショット撮影ツール</Description>
@@ -34,6 +34,8 @@
     <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
     <!-- DPAPI: API キー暗号化 -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- TTS ナレーション (Windows SAPI) -->
+    <PackageReference Include="System.Speech" Version="9.0.0" />
     <!-- UIAutomation (パスワード欄マスキング用) -->
     <PackageReference Include="UIAutomationClient" Version="*" Condition="false" />
   </ItemGroup>

@@ -92,6 +92,15 @@ public class Notifier
         _notifyIcon.ShowBalloonTip(1500, "AutoScreenshot", "スクリーンショットを保存しました", ToolTipIcon.None);
     }
 
+    /// <summary>汎用バルーン通知。バックグラウンドスレッドから呼び出し可能。</summary>
+    public void ShowBalloon(string title, string message)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            _notifyIcon?.ShowBalloonTip(3000, title, message, ToolTipIcon.Info);
+        });
+    }
+
     /// <summary>手順書生成完了通知（NF-03）。LLM 使用時はその旨を付記する。</summary>
     public void ShowManualGeneratedToast(bool llmUsed = false)
     {
