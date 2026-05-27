@@ -25,6 +25,8 @@ public class NotifyIconWrapper : IDisposable
     private readonly ManualSessionRecorder _manualRecorder;
     private readonly TriggerOrchestrator _orchestrator;
     private readonly VideoGenerator _videoGenerator;
+    private readonly ProjectStore _projectStore;
+    private readonly ExportService _exportService;
 
     private bool _paused;
     private ToolStripMenuItem? _pauseItem;
@@ -43,9 +45,12 @@ public class NotifyIconWrapper : IDisposable
         _masking = new MaskingService();
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += (_, _) => OnPauseClick(null, EventArgs.Empty);
-        _manualRecorder = new ManualSessionRecorder(_config, new UiaService(), new OcrService(), _notifier);
+        _projectStore = new ProjectStore(_config);
+        _manualRecorder = new ManualSessionRecorder(
+            _config, new UiaService(), new OcrService(), _notifier, _projectStore);
         _videoGenerator = new VideoGenerator(_config, _notifier);
         _manualRecorder.SetVideoGenerator(_videoGenerator);
+        _exportService = new ExportService(_config, _projectStore, _videoGenerator, _notifier);
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
             _manualRecorder);
@@ -69,19 +74,40 @@ public class NotifyIconWrapper : IDisposable
         _storage.OnLowDiskSpaceDetected = OnLowDiskSpace;
         _hook.Start();
 
-        // 手順書セッション開始 (S-01, S-04)
         if (_config.Config.ManualGen.Enabled)
-            _manualRecorder.StartSession(GetSessionTitle());
+        {
+            string title = GetSessionTitle();
+            _manualRecorder.StartSession(title);
 
-        // グローバルホットキー登録
+            // プロジェクト機能が有効な場合は FileStorage にプロジェクトフォルダを設定
+            // （プロジェクト作成は非同期のため短いウェイト後に設定）
+            if (_config.Config.Project.Enabled)
+                _ = SetStorageProjectFolderAsync();
+        }
+
         _hotkeyService.Register(_config.Config.HotkeyPause);
         _config.ConfigChanged += OnHotkeyConfigChanged;
 
-        // 自動起動の確認・登録
         if (_config.Config.AutoStart && !AutoStartService.IsEnabled())
             AutoStartService.Enable();
 
         Log.Information("タスクトレイアイコン表示完了");
+    }
+
+    private async Task SetStorageProjectFolderAsync()
+    {
+        // プロジェクト作成完了を最大 5 秒待つ
+        for (int i = 0; i < 50; i++)
+        {
+            await Task.Delay(100);
+            var proj = _manualRecorder.CurrentProject;
+            if (proj != null)
+            {
+                _storage.SetProjectFolder(proj.ProjectFolder);
+                return;
+            }
+        }
+        Log.Warning("プロジェクトフォルダの設定タイムアウト");
     }
 
     private ContextMenuStrip BuildContextMenu()
@@ -137,38 +163,104 @@ public class NotifyIconWrapper : IDisposable
             }
         };
 
-        var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
-        sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession(GetSessionTitle());
+        // ---- v1.2.0: プロジェクト関連メニュー ----
+        bool projectEnabled = _config.Config.Project.Enabled;
 
-        var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
-        generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
+        if (projectEnabled)
+        {
+            // プロジェクト区切り
+            var projectSplitItem = new ToolStripMenuItem("プロジェクト区切り（新しいプロジェクトを開始）");
+            projectSplitItem.Click += (_, _) =>
+            {
+                _storage.ClearProjectFolder();
+                _manualRecorder.SplitSession(GetSessionTitle());
+                _ = SetStorageProjectFolderAsync();
+            };
 
-        var generateVideoItem = new ToolStripMenuItem("動画を生成");
-        generateVideoItem.Click += (_, _) => _manualRecorder.GenerateVideoNow(_videoGenerator);
+            // エクスポート サブメニュー
+            var exportManualItem = new ToolStripMenuItem("手順書を生成（現在のプロジェクト）");
+            exportManualItem.Click += (_, _) =>
+            {
+                var proj = _manualRecorder.CurrentProject;
+                if (proj != null) _ = _exportService.ExportMarkdownAsync(proj);
+            };
 
-        var versionItem = new ToolStripMenuItem("バージョン情報");
-        versionItem.Click += (_, _) =>
-            System.Windows.MessageBox.Show(
-                "AutoScreenshot v1.1.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
-                "バージョン情報",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Information);
+            var exportVideoItem = new ToolStripMenuItem("動画を生成（現在のプロジェクト）");
+            exportVideoItem.Click += (_, _) =>
+            {
+                var proj = _manualRecorder.CurrentProject;
+                if (proj != null) _ = _exportService.ExportVideoAsync(proj);
+            };
 
-        var exitItem = new ToolStripMenuItem("終了");
-        exitItem.Click += (_, _) => System.Windows.Application.Current.Shutdown();
+            var exportImagesItem = new ToolStripMenuItem("画像を書き出す（現在のプロジェクト）");
+            exportImagesItem.Click += (_, _) =>
+            {
+                var proj = _manualRecorder.CurrentProject;
+                if (proj != null) _ = _exportService.ExportImagesAsync(proj);
+            };
 
-        menu.Items.AddRange([
-            _pauseItem, openFolderItem, new ToolStripSeparator(),
-            settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
-            sessionSplitItem, generateNowItem, generateVideoItem, new ToolStripSeparator(),
-            versionItem, new ToolStripSeparator(),
-            exitItem
-        ]);
+            var exportMenu = new ToolStripMenuItem("エクスポート");
+            exportMenu.DropDownItems.AddRange([exportManualItem, exportVideoItem, exportImagesItem]);
+
+            var manageProjectItem = new ToolStripMenuItem("プロジェクトを管理...");
+            manageProjectItem.Click += (_, _) =>
+            {
+                var win = new ProjectViewWindow(_config, _projectStore, _exportService);
+                win.Show();
+            };
+
+            menu.Items.AddRange([
+                _pauseItem, openFolderItem, new ToolStripSeparator(),
+                settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
+                projectSplitItem, exportMenu, new ToolStripSeparator(),
+                manageProjectItem, new ToolStripSeparator(),
+                BuildVersionItem(), new ToolStripSeparator(),
+                BuildExitItem()
+            ]);
+        }
+        else
+        {
+            // v1.1.0 互換メニュー（プロジェクト機能オフ時）
+            var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
+            sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession(GetSessionTitle());
+
+            var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
+            generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
+
+            var generateVideoItem = new ToolStripMenuItem("動画を生成");
+            generateVideoItem.Click += (_, _) => _manualRecorder.GenerateVideoNow(_videoGenerator);
+
+            menu.Items.AddRange([
+                _pauseItem, openFolderItem, new ToolStripSeparator(),
+                settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
+                sessionSplitItem, generateNowItem, generateVideoItem, new ToolStripSeparator(),
+                BuildVersionItem(), new ToolStripSeparator(),
+                BuildExitItem()
+            ]);
+        }
 
         return menu;
     }
 
-    // S-04: ShowTitleDialogOnStart が true のとき入力ダイアログを表示してタイトルを返す
+    private static ToolStripMenuItem BuildVersionItem()
+    {
+        var item = new ToolStripMenuItem("バージョン情報");
+        item.Click += (_, _) =>
+            System.Windows.MessageBox.Show(
+                "AutoScreenshot v1.2.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
+                "バージョン情報",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+        return item;
+    }
+
+    private static ToolStripMenuItem BuildExitItem()
+    {
+        var item = new ToolStripMenuItem("終了");
+        item.Click += (_, _) => System.Windows.Application.Current.Shutdown();
+        return item;
+    }
+
     private string GetSessionTitle()
     {
         if (!_config.Config.ManualGen.ShowTitleDialogOnStart) return "";
@@ -222,8 +314,8 @@ public class NotifyIconWrapper : IDisposable
         _hotkeyService.Dispose();
         _orchestrator.Dispose();
         _diffDetector.Dispose();
+        _storage.ClearProjectFolder();
 
-        // 手順書セッション終了 (S-02) — 同期的に待機
         _manualRecorder.StopSessionAsync().GetAwaiter().GetResult();
 
         _notifyIcon?.Dispose();

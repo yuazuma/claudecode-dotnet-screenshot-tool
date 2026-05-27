@@ -129,6 +129,15 @@ public partial class SettingsWindow : Window
         ChkAutoGenerateVideo.IsChecked  = vc.AutoGenerateWithManual;
         ChkOpenFolderOnComplete.IsChecked = vc.OpenFolderOnComplete;
         UpdateFrameTimingPanels();
+
+        // プロジェクト
+        var pc = _config.Config.Project;
+        ChkProjectEnabled.IsChecked       = pc.Enabled;
+        SldrThumbnailWidth.Value          = pc.ThumbnailMaxWidth;
+        ChkAutoExportMarkdown.IsChecked   = pc.AutoExportMarkdown;
+        ChkAutoExportDocx.IsChecked       = pc.AutoExportDocx;
+        ChkAutoExportVideo.IsChecked      = pc.AutoExportVideo;
+        ChkOpenFolderOnExport.IsChecked   = pc.OpenFolderOnExportComplete;
     }
 
     private void ApplySettings()
@@ -231,6 +240,14 @@ public partial class SettingsWindow : Window
             cfg.VideoGen.TtsVolume           = int.TryParse(TxtTtsVolume.Text, out int tv) ? Math.Clamp(tv, 0, 100) : 100;
             cfg.VideoGen.AutoGenerateWithManual  = ChkAutoGenerateVideo.IsChecked == true;
             cfg.VideoGen.OpenFolderOnComplete    = ChkOpenFolderOnComplete.IsChecked == true;
+
+            // プロジェクト
+            cfg.Project.Enabled                   = ChkProjectEnabled.IsChecked == true;
+            cfg.Project.ThumbnailMaxWidth         = (int)SldrThumbnailWidth.Value;
+            cfg.Project.AutoExportMarkdown        = ChkAutoExportMarkdown.IsChecked == true;
+            cfg.Project.AutoExportDocx            = ChkAutoExportDocx.IsChecked == true;
+            cfg.Project.AutoExportVideo           = ChkAutoExportVideo.IsChecked == true;
+            cfg.Project.OpenFolderOnExportComplete = ChkOpenFolderOnExport.IsChecked == true;
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 

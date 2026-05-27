@@ -400,6 +400,44 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- プロジェクト -->
+            <TabItem Header="プロジェクト">
+                <ScrollViewer>
+                    <StackPanel Margin="10" VerticalAlignment="Top">
+                        <CheckBox x:Name="ChkProjectEnabled"
+                                  Content="プロジェクトファイル機能を有効にする（オフにすると v1.1.0 以前の動作）"
+                                  Margin="0,5"/>
+                        <Separator Margin="0,8"/>
+
+                        <TextBlock Text="サムネイル設定" FontWeight="Bold" Margin="0,4,0,3"/>
+                        <StackPanel Orientation="Horizontal" Margin="10,2">
+                            <TextBlock Text="サムネイル最大幅:" VerticalAlignment="Center" Width="130"/>
+                            <Slider x:Name="SldrThumbnailWidth" Minimum="80" Maximum="640" Width="130"
+                                    TickFrequency="80" IsSnapToTickEnabled="True"/>
+                            <TextBlock Text="{Binding ElementName=SldrThumbnailWidth, Path=Value, StringFormat='{}{0}px'}"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
+
+                        <Separator Margin="0,8"/>
+                        <TextBlock Text="終了時の自動エクスポート" FontWeight="Bold" Margin="0,4,0,3"/>
+                        <CheckBox x:Name="ChkAutoExportMarkdown"
+                                  Content="Markdown 手順書を自動エクスポート（既定: オン）"
+                                  Margin="10,2"/>
+                        <CheckBox x:Name="ChkAutoExportDocx"
+                                  Content="Word 手順書を自動エクスポート（既定: オフ）"
+                                  Margin="10,2"/>
+                        <CheckBox x:Name="ChkAutoExportVideo"
+                                  Content="動画（APNG/MP4）を自動エクスポート（既定: オフ）"
+                                  Margin="10,2"/>
+
+                        <Separator Margin="0,8"/>
+                        <CheckBox x:Name="ChkOpenFolderOnExport"
+                                  Content="エクスポート完了時に exports/ フォルダを自動で開く"
+                                  Margin="0,5"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
 
         <!-- ボタン行 -->

@@ -27,6 +27,9 @@ public class AppConfig
 
     // --- 動画生成 ---
     public VideoGenConfig VideoGen { get; set; } = new();
+
+    // --- プロジェクト ---
+    public ProjectConfig Project { get; set; } = new();
 }
 
 public class TriggerConfig

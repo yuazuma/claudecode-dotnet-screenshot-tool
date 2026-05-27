@@ -12,6 +12,9 @@ public class FileStorage
     private DateTime _lastDiskWarning = DateTime.MinValue;
     private readonly Queue<string> _recentPaths = new();
 
+    // プロジェクト機能が有効な場合に設定される保存先フォルダ
+    private string? _projectImagesFolder;
+
     public Action? OnLowDiskSpaceDetected { get; set; }
 
     public FileStorage(ConfigStore config)
@@ -22,6 +25,16 @@ public class FileStorage
 
     public void SetNotifier(Notifier notifier) => _notifier = notifier;
 
+    /// <summary>プロジェクト機能が有効な場合に呼ぶ。以降の SaveAsync はこのフォルダに保存する。</summary>
+    public void SetProjectFolder(string projectFolder)
+    {
+        _projectImagesFolder = Path.Combine(projectFolder, "images");
+        Directory.CreateDirectory(_projectImagesFolder);
+    }
+
+    /// <summary>プロジェクトフォルダをクリアする（プロジェクト機能無効時またはセッション区切り時）。</summary>
+    public void ClearProjectFolder() => _projectImagesFolder = null;
+
     public async Task<string> SaveAsync(byte[] imageData, ImageFormat format, TriggerEvent evt)
     {
         string extension = format switch
@@ -31,7 +44,7 @@ public class FileStorage
             _ => "png",
         };
 
-        string folder = BuildFolderPath(evt);
+        string folder = _projectImagesFolder ?? BuildFolderPath(evt);
         Directory.CreateDirectory(folder);
 
         string fileName = BuildFileName(evt, extension);
@@ -105,7 +118,6 @@ public class FileStorage
             {
                 Log.Warning("ディスク空き容量が少なくなっています: {Free}MB (しきい値: {Threshold}MB)", freeMb, threshold);
 
-                // トースト通知は 10 分に 1 回まで
                 if (_notifier != null && (DateTime.Now - _lastDiskWarning).TotalMinutes >= 10)
                 {
                     _lastDiskWarning = DateTime.Now;

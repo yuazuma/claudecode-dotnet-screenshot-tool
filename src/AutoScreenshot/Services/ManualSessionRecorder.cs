@@ -14,16 +14,25 @@ public class ManualSessionRecorder
     private readonly DocxManualWriter     _docxWriter = new();
     private VideoGenerator? _videoGenerator;
 
+    // プロジェクト機能
+    private readonly ProjectStore? _projectStore;
+    private ProjectInfo? _currentProject;
+
     private ManualSession? _current;
     private readonly object _lock = new();
 
-    public ManualSessionRecorder(ConfigStore config, UiaService uia, OcrService ocr, Notifier? notifier = null)
+    public ManualSessionRecorder(ConfigStore config, UiaService uia, OcrService ocr,
+        Notifier? notifier = null, ProjectStore? projectStore = null)
     {
-        _config   = config;
-        _uia      = uia;
-        _ocr      = ocr;
-        _notifier = notifier;
+        _config       = config;
+        _uia          = uia;
+        _ocr          = ocr;
+        _notifier     = notifier;
+        _projectStore = projectStore;
     }
+
+    /// <summary>現在のプロジェクト情報を返す（プロジェクト機能が無効な場合は null）。</summary>
+    public ProjectInfo? CurrentProject { get { lock (_lock) { return _currentProject; } } }
 
     /// <summary>VideoGenerator を設定する（NotifyIconWrapper から呼ぶ）。</summary>
     public void SetVideoGenerator(VideoGenerator generator) => _videoGenerator = generator;
@@ -31,15 +40,31 @@ public class ManualSessionRecorder
     /// <summary>新しいセッションを開始する。title が空なら既定タイトルを使用する。</summary>
     public void StartSession(string title = "")
     {
+        string resolvedTitle = string.IsNullOrWhiteSpace(title)
+            ? $"操作手順書 {DateTime.Now:yyyy-MM-dd HH:mm}"
+            : title;
+
         lock (_lock)
         {
-            _current = new ManualSession
-            {
-                Title = string.IsNullOrWhiteSpace(title)
-                    ? $"操作手順書 {DateTime.Now:yyyy-MM-dd HH:mm}"
-                    : title,
-            };
+            _current = new ManualSession { Title = resolvedTitle };
             Log.Information("手順書セッション開始: {Title} ({Id})", _current.Title, _current.SessionId);
+        }
+
+        // プロジェクト機能が有効な場合はプロジェクトフォルダを非同期作成
+        if (_projectStore != null && _config.Config.Project.Enabled)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var project = await _projectStore.CreateProjectAsync(resolvedTitle);
+                    lock (_lock) { _currentProject = project; }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "プロジェクト作成失敗");
+                }
+            });
         }
     }
 
@@ -49,31 +74,27 @@ public class ManualSessionRecorder
         var cfg = _config.Config.ManualGen;
         if (!cfg.Enabled) return;
 
-        // E-05: 差分検知と手動撮影は記録しない
         if (evt.Type is TriggerType.ScreenDiff or TriggerType.ManualCapture) return;
 
         lock (_lock) { if (_current == null) return; }
 
-        // UIA / OCR は lock 外で非同期実行 (U-01〜U-04)
         string? uiName = null;
         string? ctrlType = null;
         bool needsReview = false;
 
         if (evt.Type != TriggerType.ActiveWindowChange)
         {
-            // キーボードはフォーカス要素、それ以外はカーソル位置の要素
             (uiName, ctrlType) = evt.Type == TriggerType.Keyboard
                 ? await _uia.GetFocusedElementAsync()
                 : await _uia.GetElementAtAsync(evt.CursorPosition);
 
-            // UIA 失敗 → OCR フォールバック (U-02)
             if (uiName == null && imagePath != null)
                 uiName = await _ocr.RecognizeNearbyTextAsync(imagePath, evt.CursorPosition, monitorBounds);
 
-            // 両方失敗 → 要レビューマーク (U-03)
             needsReview = uiName == null;
         }
 
+        ManualStep? step = null;
         lock (_lock)
         {
             if (_current == null) return;
@@ -86,7 +107,6 @@ public class ManualSessionRecorder
                 _                           => false,
             };
 
-            // E-04: KeyboardMode に基づいてキー入力テキストを設定
             string? inputText = null;
             string? keyCodes  = null;
             if (evt.Type == TriggerType.Keyboard)
@@ -105,7 +125,7 @@ public class ManualSessionRecorder
                 };
             }
 
-            var step = new ManualStep
+            step = new ManualStep
             {
                 StepNumber     = _current.Steps.Count + 1,
                 Timestamp      = evt.Timestamp,
@@ -120,9 +140,65 @@ public class ManualSessionRecorder
                 InputText      = inputText,
                 KeyCodes       = keyCodes,
             };
-
             step.DescriptionRuleBased = RuleBasedDescriber.Describe(step);
             _current.Steps.Add(step);
+        }
+
+        // プロジェクト機能: project.json 追記 + サムネイル生成（非同期・撮影をブロックしない）
+        if (_projectStore != null && _config.Config.Project.Enabled && step != null)
+        {
+            _ = RecordProjectStepAsync(step, imagePath);
+        }
+    }
+
+    private async Task RecordProjectStepAsync(ManualStep step, string? imagePath)
+    {
+        ProjectInfo? project;
+        lock (_lock) { project = _currentProject; }
+        if (project == null) return;
+
+        string? thumbRelPath = null;
+        if (imagePath != null && File.Exists(imagePath))
+        {
+            string thumbFileName = $"step_{step.StepNumber:D3}.jpg";
+            string thumbPath = Path.Combine(project.ProjectFolder, "thumbs", thumbFileName);
+            thumbRelPath = Path.Combine("thumbs", thumbFileName);
+            int maxWidth = _config.Config.Project.ThumbnailMaxWidth;
+            _ = ThumbnailService.GenerateAsync(imagePath, thumbPath, maxWidth);
+        }
+
+        // images/ 配下への相対パス
+        string? imageRelPath = imagePath != null
+            ? Path.GetRelativePath(project.ProjectFolder, imagePath).Replace('\\', '/')
+            : null;
+
+        var pStep = new ProjectStep
+        {
+            StepNumber           = step.StepNumber,
+            Timestamp            = new DateTimeOffset(step.Timestamp),
+            TriggerType          = step.TriggerType.ToString(),
+            UiElementName        = step.UiElementName,
+            UiControlType        = step.UiControlType,
+            CursorX              = step.CursorPosition.X,
+            CursorY              = step.CursorPosition.Y,
+            WindowTitle          = step.WindowTitle,
+            ProcessName          = step.ProcessName,
+            InputText            = step.InputText,
+            KeyCodes             = step.KeyCodes,
+            ImagePath            = imageRelPath,
+            ThumbPath            = thumbRelPath,
+            DescriptionRuleBased = step.DescriptionRuleBased,
+            DescriptionLlm       = step.DescriptionLlm,
+            NeedsReview          = step.NeedsReview,
+        };
+
+        try
+        {
+            await _projectStore!.AppendStepAsync(project, pStep);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "project.json ステップ追記失敗");
         }
     }
 
@@ -132,21 +208,30 @@ public class ManualSessionRecorder
         Task.Run(async () =>
         {
             ManualSession? completed;
+            ProjectInfo? completedProject;
             lock (_lock)
             {
                 completed = _current;
+                completedProject = _currentProject;
                 _current = null;
+                _currentProject = null;
             }
             if (completed != null)
             {
                 completed.EndedAt = DateTime.Now;
-                await WriteSessionAsync(completed);
+                if (completedProject != null)
+                {
+                    completedProject.EndedAt = DateTimeOffset.Now;
+                    try { await _projectStore!.WriteProjectJsonAsync(completedProject); }
+                    catch (Exception ex) { Log.Warning(ex, "プロジェクト終了時の project.json 更新失敗"); }
+                }
+                await WriteSessionAsync(completed, completedProject);
             }
             StartSession(nextTitle);
         });
     }
 
-    /// <summary>現セッションのスナップショットから動画を手動生成する（FR-V07-2）。</summary>
+    /// <summary>現セッションのスナップショットから動画を手動生成する。</summary>
     public void GenerateVideoNow(VideoGenerator generator)
     {
         ManualSession? snapshot;
@@ -165,18 +250,15 @@ public class ManualSessionRecorder
         Task.Run(async () =>
         {
             ManualSession? snapshot;
+            ProjectInfo? projectSnapshot;
             lock (_lock)
             {
                 if (_current == null) return;
-                // シャロウコピー（Steps リストをコピー）
-                snapshot = new ManualSession
-                {
-                    Title     = _current.Title,
-                    EndedAt   = DateTime.Now,
-                };
+                snapshot = new ManualSession { Title = _current.Title, EndedAt = DateTime.Now };
                 snapshot.Steps.AddRange(_current.Steps);
+                projectSnapshot = _currentProject;
             }
-            await WriteSessionAsync(snapshot);
+            await WriteSessionAsync(snapshot, projectSnapshot);
         });
     }
 
@@ -184,21 +266,37 @@ public class ManualSessionRecorder
     public async Task StopSessionAsync()
     {
         ManualSession? completed;
+        ProjectInfo? completedProject;
         lock (_lock)
         {
             completed = _current;
+            completedProject = _currentProject;
             _current = null;
+            _currentProject = null;
         }
         if (completed != null)
         {
             completed.EndedAt = DateTime.Now;
-            await WriteSessionAsync(completed);
+            if (completedProject != null)
+            {
+                completedProject.EndedAt = DateTimeOffset.Now;
+                try { await _projectStore!.WriteProjectJsonAsync(completedProject); }
+                catch (Exception ex) { Log.Warning(ex, "プロジェクト終了時の project.json 更新失敗"); }
+            }
+            await WriteSessionAsync(completed, completedProject);
         }
     }
 
-    private async Task WriteSessionAsync(ManualSession session)
+    private async Task WriteSessionAsync(ManualSession session, ProjectInfo? project)
     {
         var cfg = _config.Config.ManualGen;
+        var projCfg = _config.Config.Project;
+
+        // プロジェクト機能が有効な場合、AutoExport 設定に従って出力
+        bool mdEnabled   = projCfg.Enabled ? projCfg.AutoExportMarkdown : cfg.OutputMarkdown;
+        bool docxEnabled = projCfg.Enabled ? projCfg.AutoExportDocx     : cfg.OutputDocx;
+        bool videoEnabled = projCfg.Enabled ? projCfg.AutoExportVideo    : false;
+
         if (!cfg.Enabled) return;
         if (session.Steps.Count == 0)
         {
@@ -206,7 +304,7 @@ public class ManualSessionRecorder
             return;
         }
 
-        // LLM 連携 (L-02: エンドポイントと API キーの両方が設定されている場合のみ実行)
+        // LLM 連携
         bool llmUsed = false;
         if (cfg.LlmEnabled &&
             !string.IsNullOrWhiteSpace(cfg.LlmEndpoint) &&
@@ -216,26 +314,37 @@ public class ManualSessionRecorder
             {
                 string endpoint = DpapiHelper.Unprotect(cfg.LlmEndpoint);
                 string apiKey   = DpapiHelper.Unprotect(cfg.LlmApiKey);
-
                 if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(apiKey))
                 {
                     var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
                     Log.Information("LLM 操作テキスト改善を開始...");
-                    await llm.ImproveDescriptionsAsync(session);            // L-03
-                    session.Digest = await llm.GenerateDigestAsync(session); // L-04
+                    await llm.ImproveDescriptionsAsync(session);
+                    session.Digest = await llm.GenerateDigestAsync(session);
                     llmUsed = true;
-                    Log.Information("LLM 処理完了");
+
+                    // プロジェクトにも LLM 結果を反映
+                    if (project != null && _projectStore != null)
+                    {
+                        SyncLlmResultsToProject(session, project);
+                        try { await _projectStore.WriteProjectJsonAsync(project); }
+                        catch (Exception ex) { Log.Warning(ex, "LLM 結果の project.json 反映失敗"); }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "LLM 処理中にエラーが発生しました。ルールベースで続行します。"); // L-06
+                Log.Warning(ex, "LLM 処理中にエラーが発生しました。ルールベースで続行します。");
             }
         }
 
-        string folder = string.IsNullOrWhiteSpace(cfg.OutputFolder)
-            ? Path.Combine(_config.Config.Storage.SaveFolder, "manuals")
-            : cfg.OutputFolder;
+        // 出力先フォルダ
+        string folder;
+        if (projCfg.Enabled && project != null)
+            folder = Path.Combine(project.ProjectFolder, "exports");
+        else
+            folder = string.IsNullOrWhiteSpace(cfg.OutputFolder)
+                ? Path.Combine(_config.Config.Storage.SaveFolder, "manuals")
+                : cfg.OutputFolder;
 
         string slug = MakeSlug(session.Title);
         string fileBase = $"{session.StartedAt:yyyyMMdd_HHmmss}_{slug}";
@@ -243,23 +352,49 @@ public class ManualSessionRecorder
         try
         {
             int gap = cfg.ChapterTimeGapMinutes;
-            if (cfg.OutputMarkdown)
+            if (mdEnabled)
                 await _mdWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".md"), gap,
                     cfg.TemplateMarkdownPath);
-            if (cfg.OutputDocx)
+            if (docxEnabled)
                 await _docxWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".docx"), gap,
                     cfg.TemplateDotxPath);
 
-            // NF-03: 手順書生成完了をトースト通知
             _notifier?.ShowManualGeneratedToast(llmUsed);
 
-            // FR-V07-1: 手順書生成と同時に動画を自動生成するオプション
-            if (_config.Config.VideoGen.AutoGenerateWithManual && _videoGenerator != null)
+            if (projCfg.Enabled && project != null)
+            {
+                // エクスポート記録
+                if (mdEnabled && _projectStore != null)
+                    await _projectStore.RecordExportAsync(project, new Models.ExportRecord
+                    {
+                        Type = ExportType.Markdown.ToString(),
+                        OutputPath = Path.Combine("exports", fileBase + ".md"),
+                    });
+
+                // エクスポート完了時にフォルダを開く
+                if (projCfg.OpenFolderOnExportComplete)
+                    System.Diagnostics.Process.Start("explorer.exe", folder);
+            }
+
+            // 動画自動生成（v1.1.0 の VideoGen.AutoGenerateWithManual または v1.2.0 AutoExportVideo）
+            bool autoVideo = projCfg.Enabled ? videoEnabled : _config.Config.VideoGen.AutoGenerateWithManual;
+            if (autoVideo && _videoGenerator != null)
                 _ = _videoGenerator.GenerateAsync(session);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "手順書書き出し失敗");
+        }
+    }
+
+    private static void SyncLlmResultsToProject(ManualSession session, ProjectInfo project)
+    {
+        project.Digest = session.Digest;
+        foreach (var step in project.Steps)
+        {
+            var match = session.Steps.FirstOrDefault(s => s.StepNumber == step.StepNumber);
+            if (match?.DescriptionLlm != null)
+                step.DescriptionLlm = match.DescriptionLlm;
         }
     }
 
