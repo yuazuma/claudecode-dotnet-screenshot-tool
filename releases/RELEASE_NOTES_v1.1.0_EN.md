@@ -126,6 +126,14 @@ None (v1.0.0 was the initial release).
 
 ---
 
+### SHA-256 Checksum
+
+```
+1a9cc18d21cce3639cf7516403d4f7976721ed9c5238c6223a9fefdb19dfe696  AutoScreenshot-v1.1.0-win-x64.zip
+```
+
+---
+
 ### Licenses
 
 - Application: Private
