@@ -18,7 +18,7 @@ public class MetadataLogger
     {
         try
         {
-            string logDir = Path.GetDirectoryName(imagePath)!;
+            string logDir = ResolveLogDir(imagePath);
             string logFile = Path.Combine(logDir, $"events_{evt.Timestamp:yyyy-MM-dd}.log");
 
             string line = $"{evt.Timestamp:yyyy-MM-dd HH:mm:ss.fff}\t{evt.Type}\t" +
@@ -36,9 +36,18 @@ public class MetadataLogger
         }
     }
 
+    // プロジェクトモード（images/ サブフォルダ）に対応したログ出力先を返す
+    private static string ResolveLogDir(string imagePath)
+    {
+        string dir = Path.GetDirectoryName(imagePath)!;
+        return string.Equals(Path.GetFileName(dir), "images", StringComparison.OrdinalIgnoreCase)
+            ? (Path.GetDirectoryName(dir) ?? dir)
+            : dir;
+    }
+
     private async Task WriteStructuredAsync(TriggerEvent evt, string imagePath)
     {
-        string logDir = Path.GetDirectoryName(imagePath)!;
+        string logDir = ResolveLogDir(imagePath);
         var cfg = _config.Config.Metadata;
 
         if (cfg.StructuredFormat == StructuredFormat.JsonLines)

@@ -162,7 +162,7 @@ public class ManualSessionRecorder
         {
             string thumbFileName = $"step_{step.StepNumber:D3}.jpg";
             string thumbPath = Path.Combine(project.ProjectFolder, "thumbs", thumbFileName);
-            thumbRelPath = Path.Combine("thumbs", thumbFileName);
+            thumbRelPath = $"thumbs/{thumbFileName}";
             int maxWidth = _config.Config.Project.ThumbnailMaxWidth;
             _ = ThumbnailService.GenerateAsync(imagePath, thumbPath, maxWidth);
         }

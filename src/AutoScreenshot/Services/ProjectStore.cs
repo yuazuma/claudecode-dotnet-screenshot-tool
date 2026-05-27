@@ -65,6 +65,11 @@ public class ProjectStore
             await File.WriteAllTextAsync(tmpPath, json, System.Text.Encoding.UTF8);
             File.Move(tmpPath, jsonPath, overwrite: true);
         }
+        catch
+        {
+            try { File.Delete(tmpPath); } catch { }
+            throw;
+        }
         finally
         {
             _writeLock.Release();
