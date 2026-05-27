@@ -235,7 +235,7 @@ public sealed class MfVideoWriter : IDisposable
     }
 
     // ── COM インターフェース定義 ──────────────────────────────────────────────
-    [ComImport, Guid("daea8fc4-2e1f-4d8e-8d67-e0e66b9e4b43"),
+    [ComImport, Guid("3137f1cd-fe5e-4805-a5d8-fb477448cb3d"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IMFSinkWriter
     {
