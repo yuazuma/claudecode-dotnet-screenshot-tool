@@ -135,11 +135,18 @@ public partial class ProjectViewWindow : Window
         FilterAndDisplayProjects();
     }
 
+    private void ChkShowDeleted_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject != null) LoadSteps(_selectedProject);
+    }
+
     private void LstProjects_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         BtnMergeProjects.IsEnabled = LstProjects.SelectedItems.Count >= 2;
 
         _selectedProject = LstProjects.SelectedItem as ProjectInfo;
+        BtnExportMenu.IsEnabled = _selectedProject != null;
+
         if (_selectedProject == null)
         {
             TxtProjectTitle.Text = "（プロジェクトを選択してください）";
@@ -155,7 +162,10 @@ public partial class ProjectViewWindow : Window
 
     private void LoadSteps(ProjectInfo project)
     {
-        _stepVms = project.Steps.Select((s, i) => new StepViewModel(s, project.ProjectFolder)).ToList();
+        bool showDeleted = ChkShowDeleted?.IsChecked == true;
+        var steps = project.Steps.AsEnumerable();
+        if (!showDeleted) steps = steps.Where(s => !s.IsDeleted);
+        _stepVms = steps.Select((s, i) => new StepViewModel(s, project.ProjectFolder)).ToList();
         LstSteps.ItemsSource = _stepVms;
         _selectedStepIndex = -1;
         UpdateStepDetail();
@@ -229,6 +239,7 @@ public partial class ProjectViewWindow : Window
             _nextBadgeNum = _pendingAnnotations.Count(a => a.Type == "Number") + 1;
         }
 
+        ExpAnnotation.IsExpanded = _pendingAnnotations.Count > 0;
         Dispatcher.InvokeAsync(RenderAnnotationsOnCanvas, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
@@ -521,7 +532,7 @@ public partial class ProjectViewWindow : Window
     private async void BtnAnnSave_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null || _selectedStepIndex < 0) return;
-        var step = _selectedProject.Steps[_selectedStepIndex];
+        var step = _stepVms[_selectedStepIndex].Step;
         step.Annotations = _pendingAnnotations.Count > 0 ? [.. _pendingAnnotations] : null;
         await SaveProjectAsync();
         SetStatus($"ステップ {step.StepNumber} のアノテーションを保存しました。");
@@ -532,7 +543,7 @@ public partial class ProjectViewWindow : Window
     private async void BtnConfirmDesc_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null || _selectedStepIndex < 0) return;
-        var step = _selectedProject.Steps[_selectedStepIndex];
+        var step = _stepVms[_selectedStepIndex].Step;
         string val = TxtDescription.Text.Trim();
         step.DescriptionOverride = string.IsNullOrEmpty(val) ? null : val;
 
@@ -543,7 +554,7 @@ public partial class ProjectViewWindow : Window
     private async void BtnDeleteStep_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null || _selectedStepIndex < 0) return;
-        var step = _selectedProject.Steps[_selectedStepIndex];
+        var step = _stepVms[_selectedStepIndex].Step;
         if (step.IsDeleted)
         {
             SetStatus("すでに削除済みです。");
@@ -788,10 +799,20 @@ public partial class ProjectViewWindow : Window
 
     // ---- エクスポート ----
 
+    private void BtnExportMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is WinButton btn && btn.ContextMenu != null)
+        {
+            btn.ContextMenu.PlacementTarget = btn;
+            btn.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            btn.ContextMenu.IsOpen = true;
+        }
+    }
+
     private async void BtnExportImages_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("画像をエクスポート中...");
+        SetStatus("画像をエクスポート中...", busy: true);
         await _exportService.ExportImagesAsync(_selectedProject);
         SetStatus("画像エクスポート完了。");
     }
@@ -799,7 +820,7 @@ public partial class ProjectViewWindow : Window
     private async void BtnExportMarkdown_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("Markdown 手順書を生成中...");
+        SetStatus("Markdown 手順書を生成中...", busy: true);
         await _exportService.ExportMarkdownAsync(_selectedProject);
         SetStatus("Markdown エクスポート完了。");
     }
@@ -807,7 +828,7 @@ public partial class ProjectViewWindow : Window
     private async void BtnExportHtml_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("HTML 手順書を生成中...");
+        SetStatus("HTML 手順書を生成中...", busy: true);
         await _exportService.ExportHtmlAsync(_selectedProject);
         SetStatus("HTML エクスポート完了。");
     }
@@ -815,16 +836,17 @@ public partial class ProjectViewWindow : Window
     private async void BtnExportDocx_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("Word 手順書を生成中...");
+        SetStatus("Word 手順書を生成中...", busy: true);
         await _exportService.ExportDocxAsync(_selectedProject);
         SetStatus("Word エクスポート完了。");
     }
 
-    private void BtnExportVideo_Click(object sender, RoutedEventArgs e)
+    private async void BtnExportVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        _ = _exportService.ExportVideoAsync(_selectedProject);
-        SetStatus("動画生成をバックグラウンドで開始しました。");
+        SetStatus("動画生成中...", busy: true);
+        await _exportService.ExportVideoAsync(_selectedProject);
+        SetStatus("動画生成完了。");
     }
 
     private async void BtnExportZip_Click(object sender, RoutedEventArgs e)
@@ -839,7 +861,7 @@ public partial class ProjectViewWindow : Window
         };
         if (dlg.ShowDialog() != true) return;
 
-        SetStatus("ZIP を作成中...");
+        SetStatus("ZIP を作成中...", busy: true);
         await _exportService.ExportZipAsync(_selectedProject, dlg.FileName);
         SetStatus($"ZIP エクスポート完了: {dlg.FileName}");
     }
@@ -868,7 +890,11 @@ public partial class ProjectViewWindow : Window
         }
     }
 
-    private void SetStatus(string msg) => TxtStatus.Text = msg;
+    private void SetStatus(string msg, bool busy = false)
+    {
+        TxtStatus.Text = msg;
+        PbStatus.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+    }
 }
 
 // ---- ViewModel ----

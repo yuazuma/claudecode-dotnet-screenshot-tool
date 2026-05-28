@@ -10,8 +10,11 @@ namespace AutoScreenshot.Services;
 public class NotifyIconWrapper : IDisposable
 {
     private NotifyIcon? _notifyIcon;
-    private Icon? _normalIcon;
+    private Icon? _recordingIcon;
     private Icon? _pausedIcon;
+    private Icon? _capturedIcon;
+    private Icon? _processingIcon;
+    private Icon? _errorIcon;
 
     private readonly ConfigStore _config;
     private readonly HookService _hook;
@@ -58,18 +61,22 @@ public class NotifyIconWrapper : IDisposable
 
     public void Initialize()
     {
-        _normalIcon = IconFactory.CreateNormalIcon(32);
-        _pausedIcon = IconFactory.CreatePausedIcon(32);
+        _recordingIcon   = IconFactory.CreateRecordingIcon(32);
+        _pausedIcon      = IconFactory.CreatePausedIcon(32);
+        _capturedIcon    = IconFactory.CreateCapturedIcon(32);
+        _processingIcon  = IconFactory.CreateProcessingIcon(32);
+        _errorIcon       = IconFactory.CreateErrorIcon(32);
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = _normalIcon,
+            Icon = _recordingIcon,
             Text = "AutoScreenshot",
             Visible = true,
             ContextMenuStrip = BuildContextMenu(),
         };
 
-        _notifier.SetNotifyIcon(_notifyIcon, _normalIcon, _pausedIcon);
+        _notifier.SetNotifyIcon(_notifyIcon,
+            _recordingIcon, _pausedIcon, _capturedIcon, _processingIcon, _errorIcon);
         _storage.SetNotifier(_notifier);
         _storage.OnLowDiskSpaceDetected = OnLowDiskSpace;
         _hook.Start();
@@ -136,70 +143,73 @@ public class NotifyIconWrapper : IDisposable
         captureNowItem.Click += (_, _) => _orchestrator.CaptureNow();
 
         var historyItem = new ToolStripMenuItem("キャプチャ履歴");
-        menu.Opening += (_, _) =>
-        {
-            historyItem.DropDownItems.Clear();
-            var paths = _storage.GetRecentPaths();
-            if (paths.Count == 0)
-            {
-                historyItem.DropDownItems.Add(
-                    new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
-            }
-            else
-            {
-                foreach (var p in paths)
-                {
-                    string name = Path.GetFileName(p);
-                    var item = new ToolStripMenuItem(name);
-                    string capturePath = p;
-                    item.Click += (_, _) =>
-                    {
-                        if (File.Exists(capturePath))
-                            System.Diagnostics.Process.Start(
-                                "explorer.exe", $"/select,\"{capturePath}\"");
-                    };
-                    historyItem.DropDownItems.Add(item);
-                }
-            }
-        };
 
-        // ---- v1.2.0: プロジェクト関連メニュー ----
         bool projectEnabled = _config.Config.Project.Enabled;
 
         if (projectEnabled)
         {
-            // プロジェクト区切り
-            var projectSplitItem = new ToolStripMenuItem("プロジェクト区切り（新しいプロジェクトを開始）");
-            projectSplitItem.Click += (_, _) =>
+            var projectNameItem = new ToolStripMenuItem("記録中: —") { Enabled = false };
+
+            menu.Opening += (_, _) =>
+            {
+                var proj = _manualRecorder.CurrentProject;
+                projectNameItem.Text = proj != null ? $"記録中: {proj.Title}" : "記録中: —";
+
+                historyItem.DropDownItems.Clear();
+                var paths = _storage.GetRecentPaths();
+                if (paths.Count == 0)
+                {
+                    historyItem.DropDownItems.Add(
+                        new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
+                }
+                else
+                {
+                    foreach (var p in paths)
+                    {
+                        string name = Path.GetFileName(p);
+                        var item = new ToolStripMenuItem(name);
+                        string capturePath = p;
+                        item.Click += (_, _) =>
+                        {
+                            if (File.Exists(capturePath))
+                                System.Diagnostics.Process.Start(
+                                    "explorer.exe", $"/select,\"{capturePath}\"");
+                        };
+                        historyItem.DropDownItems.Add(item);
+                    }
+                }
+            };
+
+            var newProjectItem = new ToolStripMenuItem("新しいプロジェクトを開始");
+            newProjectItem.Click += (_, _) =>
             {
                 _storage.ClearProjectFolder();
                 _manualRecorder.SplitSession(GetSessionTitle());
                 _ = SetStorageProjectFolderAsync();
             };
 
-            // エクスポート サブメニュー
-            var exportManualItem = new ToolStripMenuItem("手順書を生成 Markdown（現在のプロジェクト）");
+            var exportManualItem = new ToolStripMenuItem("Markdown で出力");
             exportManualItem.Click += (_, _) =>
             {
                 var proj = _manualRecorder.CurrentProject;
                 if (proj != null) _ = _exportService.ExportMarkdownAsync(proj);
             };
 
-            var exportHtmlItem = new ToolStripMenuItem("手順書を生成 HTML（現在のプロジェクト）");
+            var exportHtmlItem = new ToolStripMenuItem("HTML で出力");
             exportHtmlItem.Click += (_, _) =>
             {
                 var proj = _manualRecorder.CurrentProject;
                 if (proj != null) _ = _exportService.ExportHtmlAsync(proj);
             };
 
-            var exportVideoItem = new ToolStripMenuItem("動画を生成（現在のプロジェクト）");
+            var exportVideoItem = new ToolStripMenuItem("動画を生成");
             exportVideoItem.Click += (_, _) =>
             {
                 var proj = _manualRecorder.CurrentProject;
                 if (proj != null) _ = _exportService.ExportVideoAsync(proj);
             };
 
-            var exportImagesItem = new ToolStripMenuItem("画像を書き出す（現在のプロジェクト）");
+            var exportImagesItem = new ToolStripMenuItem("画像を書き出す");
             exportImagesItem.Click += (_, _) =>
             {
                 var proj = _manualRecorder.CurrentProject;
@@ -217,31 +227,59 @@ public class NotifyIconWrapper : IDisposable
             };
 
             menu.Items.AddRange([
-                _pauseItem, openFolderItem, new ToolStripSeparator(),
-                settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
-                projectSplitItem, exportMenu, new ToolStripSeparator(),
-                manageProjectItem, new ToolStripSeparator(),
-                BuildVersionItem(), new ToolStripSeparator(),
+                projectNameItem, new ToolStripSeparator(),
+                _pauseItem, newProjectItem, new ToolStripSeparator(),
+                captureNowItem, historyItem, new ToolStripSeparator(),
+                exportMenu, manageProjectItem, new ToolStripSeparator(),
+                openFolderItem, settingsItem, new ToolStripSeparator(),
+                BuildVersionItem(),
                 BuildExitItem()
             ]);
         }
         else
         {
-            // v1.1.0 互換メニュー（プロジェクト機能オフ時）
+            menu.Opening += (_, _) =>
+            {
+                historyItem.DropDownItems.Clear();
+                var paths = _storage.GetRecentPaths();
+                if (paths.Count == 0)
+                {
+                    historyItem.DropDownItems.Add(
+                        new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
+                }
+                else
+                {
+                    foreach (var p in paths)
+                    {
+                        string name = Path.GetFileName(p);
+                        var item = new ToolStripMenuItem(name);
+                        string capturePath = p;
+                        item.Click += (_, _) =>
+                        {
+                            if (File.Exists(capturePath))
+                                System.Diagnostics.Process.Start(
+                                    "explorer.exe", $"/select,\"{capturePath}\"");
+                        };
+                        historyItem.DropDownItems.Add(item);
+                    }
+                }
+            };
+
             var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
             sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession(GetSessionTitle());
 
-            var generateNowItem = new ToolStripMenuItem("手順書を今すぐ生成");
+            var generateNowItem = new ToolStripMenuItem("手順書を生成");
             generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
 
             var generateVideoItem = new ToolStripMenuItem("動画を生成");
             generateVideoItem.Click += (_, _) => _manualRecorder.GenerateVideoNow(_videoGenerator);
 
             menu.Items.AddRange([
-                _pauseItem, openFolderItem, new ToolStripSeparator(),
-                settingsItem, captureNowItem, historyItem, new ToolStripSeparator(),
+                _pauseItem, new ToolStripSeparator(),
+                captureNowItem, historyItem, new ToolStripSeparator(),
                 sessionSplitItem, generateNowItem, generateVideoItem, new ToolStripSeparator(),
-                BuildVersionItem(), new ToolStripSeparator(),
+                openFolderItem, settingsItem, new ToolStripSeparator(),
+                BuildVersionItem(),
                 BuildExitItem()
             ]);
         }
@@ -254,7 +292,7 @@ public class NotifyIconWrapper : IDisposable
         var item = new ToolStripMenuItem("バージョン情報");
         item.Click += (_, _) =>
             System.Windows.MessageBox.Show(
-                "AutoScreenshot v1.2.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
+                "AutoScreenshot v1.4.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
                 "バージョン情報",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);
@@ -291,11 +329,7 @@ public class NotifyIconWrapper : IDisposable
             _paused = true;
             _orchestrator.SetPaused(true);
             if (_pauseItem != null) _pauseItem.Text = "再開";
-            if (_notifyIcon != null)
-            {
-                _notifyIcon.Icon = _pausedIcon;
-                _notifier.SetPausedState(true, _notifyIcon);
-            }
+            _notifier.SetBaseState(true);
         });
     }
 
@@ -307,11 +341,7 @@ public class NotifyIconWrapper : IDisposable
         if (_pauseItem != null)
             _pauseItem.Text = _paused ? "再開" : "一時停止";
 
-        if (_notifyIcon != null)
-        {
-            _notifyIcon.Icon = _paused ? _pausedIcon : _normalIcon;
-            _notifier.SetPausedState(_paused, _notifyIcon);
-        }
+        _notifier.SetBaseState(_paused);
     }
 
     public void Dispose()
@@ -326,7 +356,10 @@ public class NotifyIconWrapper : IDisposable
         _manualRecorder.StopSessionAsync().GetAwaiter().GetResult();
 
         _notifyIcon?.Dispose();
-        _normalIcon?.Dispose();
+        _recordingIcon?.Dispose();
         _pausedIcon?.Dispose();
+        _capturedIcon?.Dispose();
+        _processingIcon?.Dispose();
+        _errorIcon?.Dispose();
     }
 }

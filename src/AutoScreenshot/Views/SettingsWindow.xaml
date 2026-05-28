@@ -175,34 +175,6 @@
                 </StackPanel>
             </TabItem>
 
-            <!-- メタデータ -->
-            <TabItem Header="メタデータ">
-                <StackPanel Margin="10" VerticalAlignment="Top">
-                    <TextBlock Text="サイドカーログ:" FontWeight="Bold" Margin="0,5,0,5"/>
-                    <CheckBox x:Name="ChkSidecarLog" Content="撮影ごとにテキストログ (.log) を生成する" Margin="0,3"/>
-                    <TextBlock Text="画像への情報付与:" FontWeight="Bold" Margin="0,15,0,5"/>
-                    <CheckBox x:Name="ChkBurnTimestamp" Content="撮影日時を画像に焼き込む" Margin="0,3"/>
-                    <CheckBox x:Name="ChkImageOverlay" Content="カーソル位置マーカーを画像に描画する" Margin="0,3"/>
-                    <TextBlock Text="構造化ログ:" FontWeight="Bold" Margin="0,15,0,5"/>
-                    <CheckBox x:Name="ChkStructuredOutput" Content="JSONL/CSV 構造化ログを出力する" Margin="0,3"
-                              Checked="ChkStructuredOutput_Changed" Unchecked="ChkStructuredOutput_Changed"/>
-                    <StackPanel x:Name="PnlStructFmt" Orientation="Horizontal" Margin="20,5" IsEnabled="False">
-                        <RadioButton x:Name="RdoJsonLines" Content="JSON Lines (.jsonl)" GroupName="StructFmt" Margin="0,0,15,0"/>
-                        <RadioButton x:Name="RdoCsv"       Content="CSV (.csv)"           GroupName="StructFmt"/>
-                    </StackPanel>
-                </StackPanel>
-            </TabItem>
-
-            <!-- 通知 -->
-            <TabItem Header="通知">
-                <StackPanel Margin="10" VerticalAlignment="Top">
-                    <TextBlock Text="撮影時のフィードバック:" FontWeight="Bold" Margin="0,5,0,5"/>
-                    <CheckBox x:Name="ChkFlash"   Content="トレイアイコン点滅" Margin="0,3"/>
-                    <CheckBox x:Name="ChkToast"   Content="トースト通知" Margin="0,3"/>
-                    <CheckBox x:Name="ChkCounter" Content="撮影枚数をツールチップに表示" Margin="0,3"/>
-                </StackPanel>
-            </TabItem>
-
             <!-- 手順書生成 -->
             <TabItem Header="手順書生成">
                 <ScrollViewer>
@@ -445,6 +417,34 @@
                                   Margin="0,5"/>
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+
+            <!-- 通知 -->
+            <TabItem Header="通知">
+                <StackPanel Margin="10" VerticalAlignment="Top">
+                    <TextBlock Text="撮影時のフィードバック:" FontWeight="Bold" Margin="0,5,0,5"/>
+                    <CheckBox x:Name="ChkFlash"   Content="トレイアイコン点滅" Margin="0,3"/>
+                    <CheckBox x:Name="ChkToast"   Content="トースト通知" Margin="0,3"/>
+                    <CheckBox x:Name="ChkCounter" Content="撮影枚数をツールチップに表示" Margin="0,3"/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- メタデータ -->
+            <TabItem Header="メタデータ">
+                <StackPanel Margin="10" VerticalAlignment="Top">
+                    <TextBlock Text="サイドカーログ:" FontWeight="Bold" Margin="0,5,0,5"/>
+                    <CheckBox x:Name="ChkSidecarLog" Content="撮影ごとにテキストログ (.log) を生成する" Margin="0,3"/>
+                    <TextBlock Text="画像への情報付与:" FontWeight="Bold" Margin="0,15,0,5"/>
+                    <CheckBox x:Name="ChkBurnTimestamp" Content="撮影日時を画像に焼き込む" Margin="0,3"/>
+                    <CheckBox x:Name="ChkImageOverlay" Content="カーソル位置マーカーを画像に描画する" Margin="0,3"/>
+                    <TextBlock Text="構造化ログ:" FontWeight="Bold" Margin="0,15,0,5"/>
+                    <CheckBox x:Name="ChkStructuredOutput" Content="JSONL/CSV 構造化ログを出力する" Margin="0,3"
+                              Checked="ChkStructuredOutput_Changed" Unchecked="ChkStructuredOutput_Changed"/>
+                    <StackPanel x:Name="PnlStructFmt" Orientation="Horizontal" Margin="20,5" IsEnabled="False">
+                        <RadioButton x:Name="RdoJsonLines" Content="JSON Lines (.jsonl)" GroupName="StructFmt" Margin="0,0,15,0"/>
+                        <RadioButton x:Name="RdoCsv"       Content="CSV (.csv)"           GroupName="StructFmt"/>
+                    </StackPanel>
+                </StackPanel>
             </TabItem>
 
         </TabControl>

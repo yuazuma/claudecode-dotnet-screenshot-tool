@@ -36,6 +36,7 @@ public class ExportService
     /// <summary>非削除ステップの画像を exports/images/ へコピーする（FR-PJ04）。</summary>
     public async Task ExportImagesAsync(ProjectInfo project)
     {
+        _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
         await sem.WaitAsync();
         try
@@ -62,12 +63,22 @@ public class ExportService
             OpenFolderIfEnabled(outDir);
             Log.Information("画像エクスポート完了: {Dir}", outDir);
         }
-        finally { sem.Release(); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "画像エクスポートエラー");
+            _notifier?.ShowError();
+        }
+        finally
+        {
+            sem.Release();
+            _notifier?.EndProcessing();
+        }
     }
 
     /// <summary>Markdown 手順書を exports/ へ生成する（FR-PJ05）。</summary>
     public async Task ExportMarkdownAsync(ProjectInfo project)
     {
+        _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
         await sem.WaitAsync();
         try
@@ -89,12 +100,22 @@ public class ExportService
             }
             finally { CleanupTemps(temps); }
         }
-        finally { sem.Release(); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Markdown エクスポートエラー");
+            _notifier?.ShowError();
+        }
+        finally
+        {
+            sem.Release();
+            _notifier?.EndProcessing();
+        }
     }
 
     /// <summary>Word 手順書を exports/ へ生成する（FR-PJ05）。</summary>
     public async Task ExportDocxAsync(ProjectInfo project)
     {
+        _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
         await sem.WaitAsync();
         try
@@ -116,12 +137,22 @@ public class ExportService
             }
             finally { CleanupTemps(temps); }
         }
-        finally { sem.Release(); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Word エクスポートエラー");
+            _notifier?.ShowError();
+        }
+        finally
+        {
+            sem.Release();
+            _notifier?.EndProcessing();
+        }
     }
 
     /// <summary>HTML 手順書を exports/ へ生成する（FR-A）。</summary>
     public async Task ExportHtmlAsync(ProjectInfo project)
     {
+        _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
         await sem.WaitAsync();
         try
@@ -139,16 +170,38 @@ public class ExportService
             OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
             Log.Information("HTML エクスポート完了: {Path}", outPath);
         }
-        finally { sem.Release(); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "HTML エクスポートエラー");
+            _notifier?.ShowError();
+        }
+        finally
+        {
+            sem.Release();
+            _notifier?.EndProcessing();
+        }
     }
 
     /// <summary>動画を exports/ へ生成する（FR-PJ06）。バックグラウンド実行。</summary>
     public async Task ExportVideoAsync(ProjectInfo project)
     {
+        _notifier?.BeginProcessing();
         var (session, temps) = BuildAnnotatedSession(project);
-        if (session.Steps.Count == 0) { CleanupTemps(temps); return; }
-        try { await _videoGenerator.GenerateAsync(session); }
-        finally { CleanupTemps(temps); }
+        if (session.Steps.Count == 0) { CleanupTemps(temps); _notifier?.EndProcessing(); return; }
+        try
+        {
+            await _videoGenerator.GenerateAsync(session);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "動画エクスポートエラー");
+            _notifier?.ShowError();
+        }
+        finally
+        {
+            CleanupTemps(temps);
+            _notifier?.EndProcessing();
+        }
     }
 
     /// <summary>プロジェクト（images/ + thumbs/ + project.json）を ZIP に圧縮する（FR-PJ07）。</summary>
