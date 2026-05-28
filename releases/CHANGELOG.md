@@ -6,6 +6,28 @@
 
 ---
 
+## [1.5.0] — 2026-05-28
+
+### Removed（削除）
+
+- **`ProjectConfig.Enabled` 切り替え機能の除去**（v1.1.0 互換フラグ廃止）
+  - `Models/ProjectConfig.cs`: `Enabled` プロパティ削除
+  - `Views/SettingsWindow.xaml`: `ChkProjectEnabled` チェックボックスと直後の Separator を削除
+  - `Views/SettingsWindow.xaml.cs`: `LoadSettings` / `ApplySettings` の `Enabled` 参照 2 行削除
+  - `Services/NotifyIconWrapper.cs`: `Initialize` の `if (Project.Enabled)` ガード除去・`BuildContextMenu` の if/else 分岐をフラット化（プロジェクト有効側に統合）
+  - `Services/ManualSessionRecorder.cs`: `StartSession` / `RecordStepAsync` / `WriteSessionAsync` の `projCfg.Enabled` 条件をすべて除去
+
+### Changed（変更）
+
+- バージョン: 1.4.0 → 1.5.0
+- プロジェクト機能が常に有効（v1.1.0 以前の動作へのフォールバックを廃止）
+- `WriteSessionAsync` のエクスポートフラグが常に `ProjectConfig` 側の値を参照
+  - `mdEnabled`, `docxEnabled`, `videoEnabled`, `htmlEnabled`, `incrementalActive` から三項演算子除去
+  - `autoVideo` が `projCfg.AutoExportVideo` のみを参照（`VideoGen.AutoGenerateWithManual` 参照廃止）
+- 既存の `config.json` 互換性: `"Enabled"` フィールドは JSON デシリアライズ時に黙って無視されるため移行不要
+
+---
+
 ## [1.4.0] — 2026-05-28
 
 > 詳細要件: `requirements/追加要件_1.4.0.md`（作成予定）

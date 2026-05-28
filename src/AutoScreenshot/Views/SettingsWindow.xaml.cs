@@ -132,7 +132,6 @@ public partial class SettingsWindow : Window
 
         // プロジェクト
         var pc = _config.Config.Project;
-        ChkProjectEnabled.IsChecked       = pc.Enabled;
         SldrThumbnailWidth.Value          = pc.ThumbnailMaxWidth;
         ChkAutoExportMarkdown.IsChecked   = pc.AutoExportMarkdown;
         ChkAutoExportHtml.IsChecked       = pc.AutoExportHtml;
@@ -244,7 +243,6 @@ public partial class SettingsWindow : Window
             cfg.VideoGen.OpenFolderOnComplete    = ChkOpenFolderOnComplete.IsChecked == true;
 
             // プロジェクト
-            cfg.Project.Enabled                   = ChkProjectEnabled.IsChecked == true;
             cfg.Project.ThumbnailMaxWidth         = (int)SldrThumbnailWidth.Value;
             cfg.Project.AutoExportMarkdown        = ChkAutoExportMarkdown.IsChecked == true;
             cfg.Project.AutoExportHtml            = ChkAutoExportHtml.IsChecked == true;

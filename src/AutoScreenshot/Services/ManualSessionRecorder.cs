@@ -38,7 +38,7 @@ public class ManualSessionRecorder
         _projectStore = projectStore;
     }
 
-    /// <summary>現在のプロジェクト情報を返す（プロジェクト機能が無効な場合は null）。</summary>
+    /// <summary>現在記録中のプロジェクト情報を返す。セッション開始前は null。</summary>
     public ProjectInfo? CurrentProject { get { lock (_lock) { return _currentProject; } } }
 
     /// <summary>VideoGenerator を設定する（NotifyIconWrapper から呼ぶ）。</summary>
@@ -57,8 +57,7 @@ public class ManualSessionRecorder
             Log.Information("手順書セッション開始: {Title} ({Id})", _current.Title, _current.SessionId);
         }
 
-        // プロジェクト機能が有効な場合はプロジェクトフォルダを非同期作成
-        if (_projectStore != null && _config.Config.Project.Enabled)
+        if (_projectStore != null)
         {
             Task.Run(async () =>
             {
@@ -151,8 +150,7 @@ public class ManualSessionRecorder
             _current.Steps.Add(step);
         }
 
-        // プロジェクト機能: project.json 追記 + サムネイル生成（非同期・撮影をブロックしない）
-        if (_projectStore != null && _config.Config.Project.Enabled && step != null)
+        if (_projectStore != null && step != null)
         {
             _ = RecordProjectStepAsync(step, imagePath);
         }
@@ -379,11 +377,10 @@ public class ManualSessionRecorder
         var cfg = _config.Config.ManualGen;
         var projCfg = _config.Config.Project;
 
-        // プロジェクト機能が有効な場合、AutoExport 設定に従って出力
-        bool mdEnabled    = projCfg.Enabled ? projCfg.AutoExportMarkdown : cfg.OutputMarkdown;
-        bool docxEnabled  = projCfg.Enabled ? projCfg.AutoExportDocx     : cfg.OutputDocx;
-        bool videoEnabled = projCfg.Enabled ? projCfg.AutoExportVideo    : false;
-        bool htmlEnabled  = projCfg.Enabled && projCfg.AutoExportHtml;
+        bool mdEnabled    = projCfg.AutoExportMarkdown;
+        bool docxEnabled  = projCfg.AutoExportDocx;
+        bool videoEnabled = projCfg.AutoExportVideo;
+        bool htmlEnabled  = projCfg.AutoExportHtml;
 
         if (!cfg.Enabled) return;
         if (session.Steps.Count == 0)
@@ -394,7 +391,7 @@ public class ManualSessionRecorder
 
         // LLM 連携（インクリメンタル LLM が有効な場合はキュードレインのみ、無効の場合は一括処理）
         bool llmUsed = false;
-        bool incrementalActive = projCfg.Enabled && projCfg.IncrementalLlm;
+        bool incrementalActive = projCfg.IncrementalLlm;
         if (cfg.LlmEnabled &&
             !string.IsNullOrWhiteSpace(cfg.LlmEndpoint) &&
             !string.IsNullOrWhiteSpace(cfg.LlmApiKey))
@@ -448,7 +445,7 @@ public class ManualSessionRecorder
 
         // 出力先フォルダ
         string folder;
-        if (projCfg.Enabled && project != null)
+        if (project != null)
             folder = Path.Combine(project.ProjectFolder, "exports");
         else
             folder = string.IsNullOrWhiteSpace(cfg.OutputFolder)
@@ -472,7 +469,7 @@ public class ManualSessionRecorder
 
             _notifier?.ShowManualGeneratedToast(llmUsed);
 
-            if (projCfg.Enabled && project != null)
+            if (project != null)
             {
                 // エクスポート記録
                 if (mdEnabled && _projectStore != null)
@@ -493,8 +490,7 @@ public class ManualSessionRecorder
                     System.Diagnostics.Process.Start("explorer.exe", folder);
             }
 
-            // 動画自動生成（v1.1.0 の VideoGen.AutoGenerateWithManual または v1.2.0 AutoExportVideo）
-            bool autoVideo = projCfg.Enabled ? videoEnabled : _config.Config.VideoGen.AutoGenerateWithManual;
+            bool autoVideo = videoEnabled;
             if (autoVideo && _videoGenerator != null)
                 _ = _videoGenerator.GenerateAsync(session);
         }

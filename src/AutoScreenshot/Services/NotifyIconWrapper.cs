@@ -86,10 +86,7 @@ public class NotifyIconWrapper : IDisposable
             string title = GetSessionTitle();
             _manualRecorder.StartSession(title);
 
-            // プロジェクト機能が有効な場合は FileStorage にプロジェクトフォルダを設定
-            // （プロジェクト作成は非同期のため短いウェイト後に設定）
-            if (_config.Config.Project.Enabled)
-                _ = SetStorageProjectFolderAsync();
+            _ = SetStorageProjectFolderAsync();
         }
 
         _hotkeyService.Register(_config.Config.HotkeyPause);
@@ -144,145 +141,93 @@ public class NotifyIconWrapper : IDisposable
 
         var historyItem = new ToolStripMenuItem("キャプチャ履歴");
 
-        bool projectEnabled = _config.Config.Project.Enabled;
+        var projectNameItem = new ToolStripMenuItem("記録中: —") { Enabled = false };
 
-        if (projectEnabled)
+        menu.Opening += (_, _) =>
         {
-            var projectNameItem = new ToolStripMenuItem("記録中: —") { Enabled = false };
+            var proj = _manualRecorder.CurrentProject;
+            projectNameItem.Text = proj != null ? $"記録中: {proj.Title}" : "記録中: —";
 
-            menu.Opening += (_, _) =>
+            historyItem.DropDownItems.Clear();
+            var paths = _storage.GetRecentPaths();
+            if (paths.Count == 0)
             {
-                var proj = _manualRecorder.CurrentProject;
-                projectNameItem.Text = proj != null ? $"記録中: {proj.Title}" : "記録中: —";
-
-                historyItem.DropDownItems.Clear();
-                var paths = _storage.GetRecentPaths();
-                if (paths.Count == 0)
+                historyItem.DropDownItems.Add(
+                    new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
+            }
+            else
+            {
+                foreach (var p in paths)
                 {
-                    historyItem.DropDownItems.Add(
-                        new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
-                }
-                else
-                {
-                    foreach (var p in paths)
+                    string name = Path.GetFileName(p);
+                    var item = new ToolStripMenuItem(name);
+                    string capturePath = p;
+                    item.Click += (_, _) =>
                     {
-                        string name = Path.GetFileName(p);
-                        var item = new ToolStripMenuItem(name);
-                        string capturePath = p;
-                        item.Click += (_, _) =>
-                        {
-                            if (File.Exists(capturePath))
-                                System.Diagnostics.Process.Start(
-                                    "explorer.exe", $"/select,\"{capturePath}\"");
-                        };
-                        historyItem.DropDownItems.Add(item);
-                    }
+                        if (File.Exists(capturePath))
+                            System.Diagnostics.Process.Start(
+                                "explorer.exe", $"/select,\"{capturePath}\"");
+                    };
+                    historyItem.DropDownItems.Add(item);
                 }
-            };
+            }
+        };
 
-            var newProjectItem = new ToolStripMenuItem("新しいプロジェクトを開始");
-            newProjectItem.Click += (_, _) =>
-            {
-                _storage.ClearProjectFolder();
-                _manualRecorder.SplitSession(GetSessionTitle());
-                _ = SetStorageProjectFolderAsync();
-            };
-
-            var exportManualItem = new ToolStripMenuItem("Markdown で出力");
-            exportManualItem.Click += (_, _) =>
-            {
-                var proj = _manualRecorder.CurrentProject;
-                if (proj != null) _ = _exportService.ExportMarkdownAsync(proj);
-            };
-
-            var exportHtmlItem = new ToolStripMenuItem("HTML で出力");
-            exportHtmlItem.Click += (_, _) =>
-            {
-                var proj = _manualRecorder.CurrentProject;
-                if (proj != null) _ = _exportService.ExportHtmlAsync(proj);
-            };
-
-            var exportVideoItem = new ToolStripMenuItem("動画を生成");
-            exportVideoItem.Click += (_, _) =>
-            {
-                var proj = _manualRecorder.CurrentProject;
-                if (proj != null) _ = _exportService.ExportVideoAsync(proj);
-            };
-
-            var exportImagesItem = new ToolStripMenuItem("画像を書き出す");
-            exportImagesItem.Click += (_, _) =>
-            {
-                var proj = _manualRecorder.CurrentProject;
-                if (proj != null) _ = _exportService.ExportImagesAsync(proj);
-            };
-
-            var exportMenu = new ToolStripMenuItem("エクスポート");
-            exportMenu.DropDownItems.AddRange([exportManualItem, exportHtmlItem, exportVideoItem, exportImagesItem]);
-
-            var manageProjectItem = new ToolStripMenuItem("プロジェクトを管理...");
-            manageProjectItem.Click += (_, _) =>
-            {
-                var win = new ProjectViewWindow(_config, _projectStore, _exportService);
-                win.Show();
-            };
-
-            menu.Items.AddRange([
-                projectNameItem, new ToolStripSeparator(),
-                _pauseItem, newProjectItem, new ToolStripSeparator(),
-                captureNowItem, historyItem, new ToolStripSeparator(),
-                exportMenu, manageProjectItem, new ToolStripSeparator(),
-                openFolderItem, settingsItem, new ToolStripSeparator(),
-                BuildVersionItem(),
-                BuildExitItem()
-            ]);
-        }
-        else
+        var newProjectItem = new ToolStripMenuItem("新しいプロジェクトを開始");
+        newProjectItem.Click += (_, _) =>
         {
-            menu.Opening += (_, _) =>
-            {
-                historyItem.DropDownItems.Clear();
-                var paths = _storage.GetRecentPaths();
-                if (paths.Count == 0)
-                {
-                    historyItem.DropDownItems.Add(
-                        new ToolStripMenuItem("(まだ撮影されていません)") { Enabled = false });
-                }
-                else
-                {
-                    foreach (var p in paths)
-                    {
-                        string name = Path.GetFileName(p);
-                        var item = new ToolStripMenuItem(name);
-                        string capturePath = p;
-                        item.Click += (_, _) =>
-                        {
-                            if (File.Exists(capturePath))
-                                System.Diagnostics.Process.Start(
-                                    "explorer.exe", $"/select,\"{capturePath}\"");
-                        };
-                        historyItem.DropDownItems.Add(item);
-                    }
-                }
-            };
+            _storage.ClearProjectFolder();
+            _manualRecorder.SplitSession(GetSessionTitle());
+            _ = SetStorageProjectFolderAsync();
+        };
 
-            var sessionSplitItem = new ToolStripMenuItem("手順書セッション区切り");
-            sessionSplitItem.Click += (_, _) => _manualRecorder.SplitSession(GetSessionTitle());
+        var exportManualItem = new ToolStripMenuItem("Markdown で出力");
+        exportManualItem.Click += (_, _) =>
+        {
+            var proj = _manualRecorder.CurrentProject;
+            if (proj != null) _ = _exportService.ExportMarkdownAsync(proj);
+        };
 
-            var generateNowItem = new ToolStripMenuItem("手順書を生成");
-            generateNowItem.Click += (_, _) => _manualRecorder.GenerateNow();
+        var exportHtmlItem = new ToolStripMenuItem("HTML で出力");
+        exportHtmlItem.Click += (_, _) =>
+        {
+            var proj = _manualRecorder.CurrentProject;
+            if (proj != null) _ = _exportService.ExportHtmlAsync(proj);
+        };
 
-            var generateVideoItem = new ToolStripMenuItem("動画を生成");
-            generateVideoItem.Click += (_, _) => _manualRecorder.GenerateVideoNow(_videoGenerator);
+        var exportVideoItem = new ToolStripMenuItem("動画を生成");
+        exportVideoItem.Click += (_, _) =>
+        {
+            var proj = _manualRecorder.CurrentProject;
+            if (proj != null) _ = _exportService.ExportVideoAsync(proj);
+        };
 
-            menu.Items.AddRange([
-                _pauseItem, new ToolStripSeparator(),
-                captureNowItem, historyItem, new ToolStripSeparator(),
-                sessionSplitItem, generateNowItem, generateVideoItem, new ToolStripSeparator(),
-                openFolderItem, settingsItem, new ToolStripSeparator(),
-                BuildVersionItem(),
-                BuildExitItem()
-            ]);
-        }
+        var exportImagesItem = new ToolStripMenuItem("画像を書き出す");
+        exportImagesItem.Click += (_, _) =>
+        {
+            var proj = _manualRecorder.CurrentProject;
+            if (proj != null) _ = _exportService.ExportImagesAsync(proj);
+        };
+
+        var exportMenu = new ToolStripMenuItem("エクスポート");
+        exportMenu.DropDownItems.AddRange([exportManualItem, exportHtmlItem, exportVideoItem, exportImagesItem]);
+
+        var manageProjectItem = new ToolStripMenuItem("プロジェクトを管理...");
+        manageProjectItem.Click += (_, _) =>
+        {
+            var win = new ProjectViewWindow(_config, _projectStore, _exportService);
+            win.Show();
+        };
+
+        menu.Items.AddRange([
+            projectNameItem, new ToolStripSeparator(),
+            _pauseItem, newProjectItem, new ToolStripSeparator(),
+            captureNowItem, historyItem, new ToolStripSeparator(),
+            exportMenu, manageProjectItem, new ToolStripSeparator(),
+            openFolderItem, settingsItem, new ToolStripSeparator(),
+            BuildVersionItem(),
+            BuildExitItem()
+        ]);
 
         return menu;
     }
@@ -292,7 +237,7 @@ public class NotifyIconWrapper : IDisposable
         var item = new ToolStripMenuItem("バージョン情報");
         item.Click += (_, _) =>
             System.Windows.MessageBox.Show(
-                "AutoScreenshot v1.4.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
+                "AutoScreenshot v1.5.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
                 "バージョン情報",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);

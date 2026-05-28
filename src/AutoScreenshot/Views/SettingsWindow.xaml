@@ -376,11 +376,6 @@
             <TabItem Header="プロジェクト">
                 <ScrollViewer>
                     <StackPanel Margin="10" VerticalAlignment="Top">
-                        <CheckBox x:Name="ChkProjectEnabled"
-                                  Content="プロジェクトファイル機能を有効にする（オフにすると v1.1.0 以前の動作）"
-                                  Margin="0,5"/>
-                        <Separator Margin="0,8"/>
-
                         <TextBlock Text="サムネイル設定" FontWeight="Bold" Margin="0,4,0,3"/>
                         <StackPanel Orientation="Horizontal" Margin="10,2">
                             <TextBlock Text="サムネイル最大幅:" VerticalAlignment="Center" Width="130"/>
