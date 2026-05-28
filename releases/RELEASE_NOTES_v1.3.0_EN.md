@@ -53,7 +53,7 @@ Added an annotation panel to the right pane of the Project View window.
 2. Run `AutoScreenshot.exe` (no admin rights or .NET runtime required)
 3. Upgrading from v1.2.0: existing `config.json` and `.ascproj` folders work as-is
 
-SHA-256: `36096a3427c04f14db3941ea9e258fbd714e59064ae0e40c16a3d28d47db8901`
+SHA-256: `943fe19fdea01157109ac54b0b908b976d580fb299f58c31f7bad85801ca3590`
 
 ---
 
