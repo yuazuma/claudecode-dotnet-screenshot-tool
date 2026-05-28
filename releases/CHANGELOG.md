@@ -6,6 +6,51 @@
 
 ---
 
+## [1.3.0] — 2026-05-27
+
+> 詳細要件: `requirements/追加要件_1.3.0.md`
+
+### Added（追加）
+
+- **ステップアノテーション機能（FR-C）**
+  - `Models/AnnotationItem.cs`: アノテーション種別（Number / Arrow / Rect / Callout）・座標・ラベル・色モデル
+  - `Services/AnnotationRenderer.cs`: System.Drawing で番号バッジ / 矢印 / 矩形 / 吹き出しを元画像に焼き込み
+  - ProjectViewWindow にアノテーションパネル追加（ツール選択・色選択・Canvas オーバーレイ描画・保存）
+  - エクスポート（Markdown / Word / HTML / 動画）でアノテーション焼き込み済み画像を使用
+  - `ProjectStep.Annotations` フィールド追加（`List<AnnotationItem>?`、JSON に保存）
+
+- **プロジェクト管理強化（FR-D）**
+  - プロジェクト一覧の全文検索（タイトル・説明文・タグ）
+  - タグフィルタ（WrapPanel のトグルボタン）
+  - `ProjectInfo.Tags` フィールド追加
+  - LstSteps ドラッグ&ドロップによるステップ並び替え（StepNumber 自動付け直し）
+  - 「＋ステップを追加」ボタンで手動ステップ挿入（画像ファイル選択・説明文入力）
+  - `CreatedAtDisplay` 計算プロパティ（`[JsonIgnore]`）でプロジェクト一覧表示改善
+
+- **プロジェクト結合・分割機能（FR-E）**
+  - `ProjectStore.MergeProjectsAsync()`: 複数プロジェクトを時系列順に結合（元プロジェクト変更なし）
+  - `ProjectStore.SplitProjectAsync()`: 指定ステップ番号で 2 プロジェクトに分割（元プロジェクト変更なし）
+  - ProjectViewWindow に「結合...」ボタン（2件以上選択時に有効化）・「ここで分割」ボタン追加
+  - `CopyImageFile()` / `CloneStep()` ヘルパーで画像・ステップを安全にコピー
+
+- **HTML エクスポート機能（FR-A）**
+  - `Services/HtmlManualWriter.cs`: 単一 HTML ファイルへの手順書生成（Base64 埋め込み画像対応）
+  - 設定ウィンドウの「記録停止時に HTML を自動エクスポート」チェックボックス
+  - ProjectViewWindow エクスポートセクションに「手順書 (HTML)」ボタン追加
+
+- **インクリメンタル LLM 処理（FR-B）**
+  - `Services/ManualSessionRecorder.cs`: ステップ追記後に非同期で LLM 説明文改善をキュー処理
+  - 設定ウィンドウの「ステップ追記後に自動 LLM 改善」チェックボックス
+  - LLM 失敗時は `DescriptionRuleBased` にフォールバック（既存動作維持）
+
+### Changed（変更）
+
+- バージョン: 1.2.0 → 1.3.0
+- `ExportService`: 各エクスポートで `BuildAnnotatedSession()` を使用し、アノテーション焼き込み済み一時 PNG を生成・クリーンアップ
+- ProjectViewWindow ウィンドウサイズ: 900×600 → 1040×640（アノテーションパネル追加に伴う拡張）
+
+---
+
 ## [1.2.0] — 2026-05-27
 
 > 詳細要件: `requirements/追加要件_プロジェクトファイル.md`

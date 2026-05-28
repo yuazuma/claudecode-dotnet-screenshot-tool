@@ -135,8 +135,10 @@ public partial class SettingsWindow : Window
         ChkProjectEnabled.IsChecked       = pc.Enabled;
         SldrThumbnailWidth.Value          = pc.ThumbnailMaxWidth;
         ChkAutoExportMarkdown.IsChecked   = pc.AutoExportMarkdown;
+        ChkAutoExportHtml.IsChecked       = pc.AutoExportHtml;
         ChkAutoExportDocx.IsChecked       = pc.AutoExportDocx;
         ChkAutoExportVideo.IsChecked      = pc.AutoExportVideo;
+        ChkIncrementalLlm.IsChecked       = pc.IncrementalLlm;
         ChkOpenFolderOnExport.IsChecked   = pc.OpenFolderOnExportComplete;
     }
 
@@ -245,8 +247,10 @@ public partial class SettingsWindow : Window
             cfg.Project.Enabled                   = ChkProjectEnabled.IsChecked == true;
             cfg.Project.ThumbnailMaxWidth         = (int)SldrThumbnailWidth.Value;
             cfg.Project.AutoExportMarkdown        = ChkAutoExportMarkdown.IsChecked == true;
+            cfg.Project.AutoExportHtml            = ChkAutoExportHtml.IsChecked == true;
             cfg.Project.AutoExportDocx            = ChkAutoExportDocx.IsChecked == true;
             cfg.Project.AutoExportVideo           = ChkAutoExportVideo.IsChecked == true;
+            cfg.Project.IncrementalLlm            = ChkIncrementalLlm.IsChecked == true;
             cfg.Project.OpenFolderOnExportComplete = ChkOpenFolderOnExport.IsChecked == true;
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し

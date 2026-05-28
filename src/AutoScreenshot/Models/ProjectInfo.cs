@@ -13,12 +13,16 @@ public class ProjectInfo
     public string OsInfo { get; set; } = $"{Environment.OSVersion} / {Environment.UserName}";
     public DateTimeOffset? EndedAt { get; set; }
     public string? Digest { get; set; }
+    public List<string> Tags { get; set; } = [];
     public List<ProjectStep> Steps { get; set; } = [];
     public List<ExportRecord> ExportHistory { get; set; } = [];
 
     /// <summary>project.json が格納されているフォルダへの絶対パス（JSON には保存しない）</summary>
     [JsonIgnore]
     public string ProjectFolder { get; set; } = "";
+
+    [JsonIgnore]
+    public string CreatedAtDisplay => CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 }
 
 public class ProjectStep
@@ -52,6 +56,9 @@ public class ProjectStep
     /// <summary>削除フラグ。true のステップはエクスポート対象から除外。画像は _deleted/ へ移動。</summary>
     public bool IsDeleted { get; set; }
 
+    /// <summary>アノテーション一覧（null = なし）。座標は元画像原寸 px。</summary>
+    public List<AnnotationItem>? Annotations { get; set; }
+
     /// <summary>エクスポート時に使用する実効説明文を返す</summary>
     [JsonIgnore]
     public string EffectiveDescription =>
@@ -72,4 +79,5 @@ public enum ExportType
     Docx,
     Video,
     Zip,
+    Html,
 }

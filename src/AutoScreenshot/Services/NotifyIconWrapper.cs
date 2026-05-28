@@ -178,11 +178,18 @@ public class NotifyIconWrapper : IDisposable
             };
 
             // エクスポート サブメニュー
-            var exportManualItem = new ToolStripMenuItem("手順書を生成（現在のプロジェクト）");
+            var exportManualItem = new ToolStripMenuItem("手順書を生成 Markdown（現在のプロジェクト）");
             exportManualItem.Click += (_, _) =>
             {
                 var proj = _manualRecorder.CurrentProject;
                 if (proj != null) _ = _exportService.ExportMarkdownAsync(proj);
+            };
+
+            var exportHtmlItem = new ToolStripMenuItem("手順書を生成 HTML（現在のプロジェクト）");
+            exportHtmlItem.Click += (_, _) =>
+            {
+                var proj = _manualRecorder.CurrentProject;
+                if (proj != null) _ = _exportService.ExportHtmlAsync(proj);
             };
 
             var exportVideoItem = new ToolStripMenuItem("動画を生成（現在のプロジェクト）");
@@ -200,7 +207,7 @@ public class NotifyIconWrapper : IDisposable
             };
 
             var exportMenu = new ToolStripMenuItem("エクスポート");
-            exportMenu.DropDownItems.AddRange([exportManualItem, exportVideoItem, exportImagesItem]);
+            exportMenu.DropDownItems.AddRange([exportManualItem, exportHtmlItem, exportVideoItem, exportImagesItem]);
 
             var manageProjectItem = new ToolStripMenuItem("プロジェクトを管理...");
             manageProjectItem.Click += (_, _) =>

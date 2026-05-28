@@ -423,11 +423,20 @@
                         <CheckBox x:Name="ChkAutoExportMarkdown"
                                   Content="Markdown 手順書を自動エクスポート（既定: オン）"
                                   Margin="10,2"/>
+                        <CheckBox x:Name="ChkAutoExportHtml"
+                                  Content="HTML 手順書を自動エクスポート（既定: オフ）"
+                                  Margin="10,2"/>
                         <CheckBox x:Name="ChkAutoExportDocx"
                                   Content="Word 手順書を自動エクスポート（既定: オフ）"
                                   Margin="10,2"/>
                         <CheckBox x:Name="ChkAutoExportVideo"
                                   Content="動画（APNG/MP4）を自動エクスポート（既定: オフ）"
+                                  Margin="10,2"/>
+
+                        <Separator Margin="0,8"/>
+                        <TextBlock Text="LLM 連携" FontWeight="Bold" Margin="0,4,0,3"/>
+                        <CheckBox x:Name="ChkIncrementalLlm"
+                                  Content="記録中にリアルタイムで LLM 説明文を生成する（インクリメンタル LLM）"
                                   Margin="10,2"/>
 
                         <Separator Margin="0,8"/>

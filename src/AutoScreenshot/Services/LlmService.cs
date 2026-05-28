@@ -56,6 +56,49 @@ public class LlmService
     }
 
     /// <summary>
+    /// 単一ステップの説明文を LLM で改善して返す（インクリメンタル LLM 用・FR-B）。
+    /// 失敗時は null を返す。
+    /// </summary>
+    public async Task<string?> ImproveStepDescriptionAsync(
+        string triggerType, string? uiElementName, string? windowTitle,
+        string? ruleBasedDescription, CancellationToken ct = default)
+    {
+        string context = $"操作種別: {triggerType}\n" +
+                         $"UI要素: {uiElementName ?? "(不明)"}\n" +
+                         $"ウィンドウ: {windowTitle ?? "(不明)"}\n" +
+                         $"ルールベース説明: {ruleBasedDescription ?? "(なし)"}";
+
+        const string system = """
+            あなたは業務操作手順書の文書化アシスタントです。
+            1つの操作ステップの説明文を、より自然で分かりやすい日本語に改善してください。
+            改善した説明文のみを1行で出力してください。前置きや後書きは不要です。
+            """;
+
+        try
+        {
+            var client  = new ChatCompletionsClient(new Uri(_endpoint), new AzureKeyCredential(_apiKey));
+            var options = new ChatCompletionsOptions
+            {
+                Model    = _deploymentName,
+                Messages =
+                {
+                    new ChatRequestSystemMessage(system),
+                    new ChatRequestUserMessage($"以下の操作ステップの説明文を改善してください:\n\n{context}"),
+                },
+                MaxTokens = 256,
+            };
+            Response<ChatCompletions> response = await client.CompleteAsync(options, ct);
+            string? result = response.Value.Content?.Trim();
+            return string.IsNullOrEmpty(result) ? null : result;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "インクリメンタル LLM 呼び出し失敗");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// セッション全体の操作ログを LLM に渡し、3〜5 行の要約文を生成する (L-04)。
     /// 失敗時は null を返す (L-06)。
     /// </summary>

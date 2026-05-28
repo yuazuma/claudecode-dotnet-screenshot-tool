@@ -128,6 +128,95 @@ public class ProjectStore
         await WriteProjectJsonAsync(info);
     }
 
+    /// <summary>複数プロジェクトを時系列順に結合した新プロジェクトを生成する（FR-E01）。元プロジェクトは変更しない。</summary>
+    public async Task<ProjectInfo> MergeProjectsAsync(IEnumerable<ProjectInfo> sources, string newTitle)
+    {
+        var sourceList = sources.OrderBy(p => p.CreatedAt).ToList();
+        var merged = await CreateProjectAsync(newTitle);
+
+        int stepNum = 1;
+        foreach (var src in sourceList)
+        {
+            foreach (var step in src.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepNumber))
+            {
+                var newStep = CloneStep(step, stepNum);
+
+                newStep.ImagePath = CopyImageFile(src.ProjectFolder, step.ImagePath, merged.ProjectFolder, "images", stepNum);
+                newStep.ThumbPath = CopyImageFile(src.ProjectFolder, step.ThumbPath, merged.ProjectFolder, "thumbs", stepNum);
+
+                merged.Steps.Add(newStep);
+                stepNum++;
+            }
+        }
+
+        await WriteProjectJsonAsync(merged);
+        Log.Information("プロジェクト結合完了: {Title} ({Count} ステップ)", newTitle, merged.Steps.Count);
+        return merged;
+    }
+
+    /// <summary>指定ステップ番号で既存プロジェクトを 2 つに分割する（FR-E02）。元プロジェクトは変更しない。</summary>
+    public async Task<(ProjectInfo before, ProjectInfo after)> SplitProjectAsync(
+        ProjectInfo source, int splitAtStepNumber, string titleBefore, string titleAfter)
+    {
+        var before = await CreateProjectAsync(titleBefore);
+        var after = await CreateProjectAsync(titleAfter);
+
+        var activeSteps = source.Steps.Where(s => !s.IsDeleted).OrderBy(s => s.StepNumber).ToList();
+        int numBefore = 1, numAfter = 1;
+        foreach (var step in activeSteps)
+        {
+            bool isAfter = step.StepNumber >= splitAtStepNumber;
+            var dest = isAfter ? after : before;
+            int num = isAfter ? numAfter++ : numBefore++;
+            var newStep = CloneStep(step, num);
+            newStep.ImagePath = CopyImageFile(source.ProjectFolder, step.ImagePath, dest.ProjectFolder, "images", num);
+            newStep.ThumbPath = CopyImageFile(source.ProjectFolder, step.ThumbPath, dest.ProjectFolder, "thumbs", num);
+            dest.Steps.Add(newStep);
+        }
+
+        await WriteProjectJsonAsync(before);
+        await WriteProjectJsonAsync(after);
+        Log.Information("プロジェクト分割完了: {B} / {A}", titleBefore, titleAfter);
+        return (before, after);
+    }
+
+    private static string? CopyImageFile(string srcFolder, string? relPath, string destFolder, string subDir, int stepNum)
+    {
+        if (relPath == null) return null;
+        string src = Path.Combine(srcFolder, relPath.Replace('/', '\\'));
+        if (!File.Exists(src)) return null;
+        string ext = Path.GetExtension(src);
+        string newName = $"step_{stepNum:D3}{ext}";
+        string destDir = Path.Combine(destFolder, subDir);
+        Directory.CreateDirectory(destDir);
+        string dest = Path.Combine(destDir, newName);
+        File.Copy(src, dest, overwrite: true);
+        return $"{subDir}/{newName}";
+    }
+
+    private static ProjectStep CloneStep(ProjectStep s, int newStepNumber) => new()
+    {
+        StepNumber           = newStepNumber,
+        Timestamp            = s.Timestamp,
+        TriggerType          = s.TriggerType,
+        UiElementName        = s.UiElementName,
+        UiControlType        = s.UiControlType,
+        CursorX              = s.CursorX,
+        CursorY              = s.CursorY,
+        WindowTitle          = s.WindowTitle,
+        ProcessName          = s.ProcessName,
+        InputText            = s.InputText,
+        KeyCodes             = s.KeyCodes,
+        DescriptionRuleBased = s.DescriptionRuleBased,
+        DescriptionLlm       = s.DescriptionLlm,
+        DescriptionOverride  = s.DescriptionOverride,
+        NeedsReview          = s.NeedsReview,
+        Annotations          = s.Annotations?.Select(a => new AnnotationItem
+        {
+            Type = a.Type, X = a.X, Y = a.Y, X2 = a.X2, Y2 = a.Y2, Label = a.Label, Color = a.Color
+        }).ToList(),
+    };
+
     private static string MakeSlug(string title)
     {
         var sb = new System.Text.StringBuilder();

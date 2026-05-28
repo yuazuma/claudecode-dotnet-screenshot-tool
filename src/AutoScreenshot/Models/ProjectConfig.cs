@@ -18,6 +18,12 @@ public class ProjectConfig
     /// <summary>アプリ終了時に動画を自動エクスポートする</summary>
     public bool AutoExportVideo { get; set; } = false;
 
+    /// <summary>アプリ終了時に HTML 手順書を自動エクスポートする</summary>
+    public bool AutoExportHtml { get; set; } = false;
+
+    /// <summary>ステップ記録ごとにリアルタイムで LLM 説明文を生成する（LLM 有効時のみ動作）</summary>
+    public bool IncrementalLlm { get; set; } = true;
+
     /// <summary>エクスポート完了時に exports/ フォルダを自動で開く</summary>
     public bool OpenFolderOnExportComplete { get; set; } = true;
 }

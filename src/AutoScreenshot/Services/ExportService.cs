@@ -15,6 +15,7 @@ public class ExportService
     private readonly Notifier? _notifier;
     private readonly MarkdownManualWriter _mdWriter = new();
     private readonly DocxManualWriter _docxWriter = new();
+    private readonly HtmlManualWriter _htmlWriter = new();
     private readonly VideoGenerator _videoGenerator;
 
     // エクスポート中の多重実行防止（プロジェクト ID → SemaphoreSlim）
@@ -50,10 +51,11 @@ public class ExportService
             foreach (var step in steps)
             {
                 if (step.ImagePath == null) continue;
-                string src = Path.Combine(project.ProjectFolder, step.ImagePath.Replace('/', '\\'));
-                if (!File.Exists(src)) continue;
-                string dest = Path.Combine(outDir, $"{++n:D3}_{Path.GetFileName(src)}");
-                File.Copy(src, dest, overwrite: true);
+                var (srcPath, isTemp) = ResolveAnnotatedImagePath(project, step);
+                if (!File.Exists(srcPath)) { if (isTemp) try { File.Delete(srcPath); } catch { } continue; }
+                string dest = Path.Combine(outDir, $"{++n:D3}_{Path.GetFileName(step.ImagePath)}");
+                File.Copy(srcPath, dest, overwrite: true);
+                if (isTemp) try { File.Delete(srcPath); } catch { }
             }
 
             await RecordExport(project, ExportType.Images, outDir);
@@ -70,19 +72,22 @@ public class ExportService
         await sem.WaitAsync();
         try
         {
-            var session = BuildSession(project);
+            var (session, temps) = BuildAnnotatedSession(project);
             if (session.Steps.Count == 0) return;
+            try
+            {
+                string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string slug = MakeSlug(project.Title);
+                string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.md");
 
-            string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string slug = MakeSlug(project.Title);
-            string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.md");
+                var cfg = _config.Config.ManualGen;
+                await _mdWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateMarkdownPath);
 
-            var cfg = _config.Config.ManualGen;
-            await _mdWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateMarkdownPath);
-
-            await RecordExport(project, ExportType.Markdown, Path.Combine("exports", Path.GetFileName(outPath)));
-            OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
-            Log.Information("Markdown エクスポート完了: {Path}", outPath);
+                await RecordExport(project, ExportType.Markdown, Path.Combine("exports", Path.GetFileName(outPath)));
+                OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
+                Log.Information("Markdown エクスポート完了: {Path}", outPath);
+            }
+            finally { CleanupTemps(temps); }
         }
         finally { sem.Release(); }
     }
@@ -94,29 +99,56 @@ public class ExportService
         await sem.WaitAsync();
         try
         {
-            var session = BuildSession(project);
+            var (session, temps) = BuildAnnotatedSession(project);
             if (session.Steps.Count == 0) return;
+            try
+            {
+                string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string slug = MakeSlug(project.Title);
+                string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.docx");
+
+                var cfg = _config.Config.ManualGen;
+                await _docxWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateDotxPath);
+
+                await RecordExport(project, ExportType.Docx, Path.Combine("exports", Path.GetFileName(outPath)));
+                OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
+                Log.Information("Word エクスポート完了: {Path}", outPath);
+            }
+            finally { CleanupTemps(temps); }
+        }
+        finally { sem.Release(); }
+    }
+
+    /// <summary>HTML 手順書を exports/ へ生成する（FR-A）。</summary>
+    public async Task ExportHtmlAsync(ProjectInfo project)
+    {
+        var sem = GetLock(project.ProjectId);
+        await sem.WaitAsync();
+        try
+        {
+            var steps = ActiveSteps(project);
+            if (steps.Count == 0) return;
 
             string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string slug = MakeSlug(project.Title);
-            string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.docx");
+            string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.html");
 
-            var cfg = _config.Config.ManualGen;
-            await _docxWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateDotxPath);
+            await _htmlWriter.WriteAsync(project, outPath);
 
-            await RecordExport(project, ExportType.Docx, Path.Combine("exports", Path.GetFileName(outPath)));
+            await RecordExport(project, ExportType.Html, Path.Combine("exports", Path.GetFileName(outPath)));
             OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
-            Log.Information("Word エクスポート完了: {Path}", outPath);
+            Log.Information("HTML エクスポート完了: {Path}", outPath);
         }
         finally { sem.Release(); }
     }
 
     /// <summary>動画を exports/ へ生成する（FR-PJ06）。バックグラウンド実行。</summary>
-    public Task ExportVideoAsync(ProjectInfo project)
+    public async Task ExportVideoAsync(ProjectInfo project)
     {
-        var session = BuildSession(project);
-        if (session.Steps.Count == 0) return Task.CompletedTask;
-        return _videoGenerator.GenerateAsync(session);
+        var (session, temps) = BuildAnnotatedSession(project);
+        if (session.Steps.Count == 0) { CleanupTemps(temps); return; }
+        try { await _videoGenerator.GenerateAsync(session); }
+        finally { CleanupTemps(temps); }
     }
 
     /// <summary>プロジェクト（images/ + thumbs/ + project.json）を ZIP に圧縮する（FR-PJ07）。</summary>
@@ -143,6 +175,81 @@ public class ExportService
 
     private static List<ProjectStep> ActiveSteps(ProjectInfo project)
         => project.Steps.Where(s => !s.IsDeleted).ToList();
+
+    /// <summary>
+    /// アノテーションがある場合は焼き込んだ画像を一時ファイルに書き出してパスを返す。
+    /// ない場合は元パスをそのまま返す。使用後は isTemp=true なら削除すること。
+    /// </summary>
+    private static (string path, bool isTemp) ResolveAnnotatedImagePath(ProjectInfo project, ProjectStep step)
+    {
+        if (step.ImagePath == null) return ("", false);
+        string srcPath = Path.Combine(project.ProjectFolder, step.ImagePath.Replace('/', '\\'));
+
+        if (step.Annotations == null || step.Annotations.Count == 0)
+            return (srcPath, false);
+
+        using var bmp = AnnotationRenderer.Render(srcPath, step.Annotations);
+        if (bmp == null) return (srcPath, false);
+
+        string tmp = Path.Combine(Path.GetTempPath(), $"ascproj_ann_{Guid.NewGuid():N}.png");
+        bmp.Save(tmp, System.Drawing.Imaging.ImageFormat.Png);
+        return (tmp, true);
+    }
+
+    /// <summary>アノテーション焼き込み済み ManualSession を構築する。アノテーションがあるステップは一時 PNG を生成する。</summary>
+    private (ManualSession session, List<string> temps) BuildAnnotatedSession(ProjectInfo project)
+    {
+        var temps = new List<string>();
+        var session = new ManualSession
+        {
+            Title   = project.Title,
+            EndedAt = project.EndedAt?.LocalDateTime,
+            Digest  = project.Digest,
+        };
+
+        foreach (var ps in ActiveSteps(project))
+        {
+            string? imagePath = ps.ImagePath != null
+                ? Path.Combine(project.ProjectFolder, ps.ImagePath.Replace('/', '\\'))
+                : null;
+
+            if (imagePath != null && ps.Annotations?.Count > 0)
+            {
+                using var bmp = AnnotationRenderer.Render(imagePath, ps.Annotations);
+                if (bmp != null)
+                {
+                    string tmp = Path.Combine(Path.GetTempPath(), $"ascann_{Guid.NewGuid():N}.png");
+                    bmp.Save(tmp, System.Drawing.Imaging.ImageFormat.Png);
+                    temps.Add(tmp);
+                    imagePath = tmp;
+                }
+            }
+
+            session.Steps.Add(new ManualStep
+            {
+                StepNumber           = ps.StepNumber,
+                Timestamp            = ps.Timestamp.LocalDateTime,
+                TriggerType          = Enum.TryParse<TriggerType>(ps.TriggerType, out var tt) ? tt : TriggerType.MouseLeftClick,
+                UiElementName        = ps.UiElementName,
+                UiControlType        = ps.UiControlType,
+                CursorPosition       = new System.Drawing.Point(ps.CursorX, ps.CursorY),
+                WindowTitle          = ps.WindowTitle,
+                ProcessName          = ps.ProcessName,
+                InputText            = ps.InputText,
+                KeyCodes             = ps.KeyCodes,
+                ImagePath            = imagePath,
+                DescriptionRuleBased = ps.DescriptionRuleBased,
+                DescriptionLlm       = ps.DescriptionOverride ?? ps.DescriptionLlm,
+                NeedsReview          = ps.NeedsReview,
+            });
+        }
+        return (session, temps);
+    }
+
+    private static void CleanupTemps(List<string> temps)
+    {
+        foreach (var t in temps) try { File.Delete(t); } catch { }
+    }
 
     /// <summary>ProjectInfo から ManualSession を構築する（既存 Writer への橋渡し）。</summary>
     private ManualSession BuildSession(ProjectInfo project)

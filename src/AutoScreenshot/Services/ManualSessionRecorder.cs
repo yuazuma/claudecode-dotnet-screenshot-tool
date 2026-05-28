@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AutoScreenshot.Models;
 using Serilog;
 
@@ -17,6 +18,12 @@ public class ManualSessionRecorder
     // プロジェクト機能
     private readonly ProjectStore? _projectStore;
     private ProjectInfo? _currentProject;
+
+    // インクリメンタル LLM キュー（FR-B）
+    private readonly ConcurrentQueue<(ProjectInfo project, ProjectStep step)> _llmQueue = new();
+    private readonly SemaphoreSlim _llmSemaphore = new(1, 1);
+    private readonly CancellationTokenSource _llmCts = new();
+    private Task? _llmWorkerTask;
 
     private ManualSession? _current;
     private readonly object _lock = new();
@@ -199,7 +206,79 @@ public class ManualSessionRecorder
         catch (Exception ex)
         {
             Log.Warning(ex, "project.json ステップ追記失敗");
+            return;
         }
+
+        // インクリメンタル LLM: LLM 有効かつ IncrementalLlm オン の場合はキューに積む（FR-B）
+        var cfg = _config.Config;
+        if (cfg.Project.IncrementalLlm &&
+            cfg.ManualGen.LlmEnabled &&
+            !string.IsNullOrWhiteSpace(cfg.ManualGen.LlmEndpoint) &&
+            !string.IsNullOrWhiteSpace(cfg.ManualGen.LlmApiKey))
+        {
+            _llmQueue.Enqueue((project, pStep));
+            EnsureLlmWorkerRunning();
+        }
+    }
+
+    private void EnsureLlmWorkerRunning()
+    {
+        if (_llmWorkerTask is { IsCompleted: false }) return;
+        _llmWorkerTask = Task.Run(RunLlmQueueAsync);
+    }
+
+    private async Task RunLlmQueueAsync()
+    {
+        var cfg = _config.Config.ManualGen;
+        string endpoint, apiKey;
+        try
+        {
+            endpoint = DpapiHelper.Unprotect(cfg.LlmEndpoint!);
+            apiKey   = DpapiHelper.Unprotect(cfg.LlmApiKey!);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "インクリメンタル LLM: 認証情報の復号失敗");
+            return;
+        }
+
+        var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
+
+        while (_llmQueue.TryDequeue(out var item) && !_llmCts.Token.IsCancellationRequested)
+        {
+            await _llmSemaphore.WaitAsync(_llmCts.Token).ConfigureAwait(false);
+            try
+            {
+                var (project, pStep) = item;
+                string? improved = await llm.ImproveStepDescriptionAsync(
+                    pStep.TriggerType, pStep.UiElementName, pStep.WindowTitle,
+                    pStep.DescriptionRuleBased, _llmCts.Token);
+
+                if (improved != null)
+                {
+                    pStep.DescriptionLlm = improved;
+                    try { await _projectStore!.WriteProjectJsonAsync(project); }
+                    catch (Exception ex) { Log.Warning(ex, "インクリメンタル LLM: project.json 更新失敗"); }
+                }
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex) { Log.Warning(ex, "インクリメンタル LLM: ステップ処理失敗"); }
+            finally { _llmSemaphore.Release(); }
+        }
+    }
+
+    /// <summary>LLM キューが空になるまで最大 maxWaitMs 待機する（セッション終了時用）。</summary>
+    private async Task DrainLlmQueueAsync(int maxWaitMs = 60_000)
+    {
+        if (_llmQueue.IsEmpty) return;
+        Log.Information("インクリメンタル LLM キューをドレイン中（最大 {Max}s）...", maxWaitMs / 1000);
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(maxWaitMs);
+        while (!_llmQueue.IsEmpty && DateTime.UtcNow < deadline)
+            await Task.Delay(500).ConfigureAwait(false);
+
+        if (!_llmQueue.IsEmpty)
+            Log.Warning("インクリメンタル LLM キュードレイン タイムアウト（未処理 {N} 件）", _llmQueue.Count);
     }
 
     /// <summary>現セッションを保存して完了させ、新しいセッションを開始する（手動区切り）。</summary>
@@ -285,6 +364,14 @@ public class ManualSessionRecorder
             }
             await WriteSessionAsync(completed, completedProject);
         }
+
+        // インクリメンタル LLM ワーカーをキャンセルして完了を待つ
+        _llmCts.Cancel();
+        if (_llmWorkerTask != null)
+        {
+            try { await _llmWorkerTask.ConfigureAwait(false); }
+            catch { /* OperationCanceledException は無視 */ }
+        }
     }
 
     private async Task WriteSessionAsync(ManualSession session, ProjectInfo? project)
@@ -293,9 +380,10 @@ public class ManualSessionRecorder
         var projCfg = _config.Config.Project;
 
         // プロジェクト機能が有効な場合、AutoExport 設定に従って出力
-        bool mdEnabled   = projCfg.Enabled ? projCfg.AutoExportMarkdown : cfg.OutputMarkdown;
-        bool docxEnabled = projCfg.Enabled ? projCfg.AutoExportDocx     : cfg.OutputDocx;
+        bool mdEnabled    = projCfg.Enabled ? projCfg.AutoExportMarkdown : cfg.OutputMarkdown;
+        bool docxEnabled  = projCfg.Enabled ? projCfg.AutoExportDocx     : cfg.OutputDocx;
         bool videoEnabled = projCfg.Enabled ? projCfg.AutoExportVideo    : false;
+        bool htmlEnabled  = projCfg.Enabled && projCfg.AutoExportHtml;
 
         if (!cfg.Enabled) return;
         if (session.Steps.Count == 0)
@@ -304,36 +392,57 @@ public class ManualSessionRecorder
             return;
         }
 
-        // LLM 連携
+        // LLM 連携（インクリメンタル LLM が有効な場合はキュードレインのみ、無効の場合は一括処理）
         bool llmUsed = false;
+        bool incrementalActive = projCfg.Enabled && projCfg.IncrementalLlm;
         if (cfg.LlmEnabled &&
             !string.IsNullOrWhiteSpace(cfg.LlmEndpoint) &&
             !string.IsNullOrWhiteSpace(cfg.LlmApiKey))
         {
-            try
+            if (incrementalActive)
             {
-                string endpoint = DpapiHelper.Unprotect(cfg.LlmEndpoint);
-                string apiKey   = DpapiHelper.Unprotect(cfg.LlmApiKey);
-                if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(apiKey))
+                // インクリメンタル LLM モード: キューが空になるまで待機
+                await DrainLlmQueueAsync();
+                // LLM 結果が既に各ステップに反映済みなので project.json から session に同期
+                if (project != null)
                 {
-                    var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
-                    Log.Information("LLM 操作テキスト改善を開始...");
-                    await llm.ImproveDescriptionsAsync(session);
-                    session.Digest = await llm.GenerateDigestAsync(session);
-                    llmUsed = true;
-
-                    // プロジェクトにも LLM 結果を反映
-                    if (project != null && _projectStore != null)
+                    foreach (var ps in project.Steps)
                     {
-                        SyncLlmResultsToProject(session, project);
-                        try { await _projectStore.WriteProjectJsonAsync(project); }
-                        catch (Exception ex) { Log.Warning(ex, "LLM 結果の project.json 反映失敗"); }
+                        var ms = session.Steps.FirstOrDefault(s => s.StepNumber == ps.StepNumber);
+                        if (ms != null && ps.DescriptionLlm != null)
+                            ms.DescriptionLlm = ps.DescriptionLlm;
+                    }
+                    session.Digest = project.Digest;
+                }
+                llmUsed = project?.Steps.Any(s => s.DescriptionLlm != null) == true;
+            }
+            else
+            {
+                // 一括 LLM モード（従来動作）
+                try
+                {
+                    string endpoint = DpapiHelper.Unprotect(cfg.LlmEndpoint);
+                    string apiKey   = DpapiHelper.Unprotect(cfg.LlmApiKey);
+                    if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(apiKey))
+                    {
+                        var llm = new LlmService(endpoint, apiKey, cfg.LlmDeploymentName);
+                        Log.Information("LLM 操作テキスト改善を開始...");
+                        await llm.ImproveDescriptionsAsync(session);
+                        session.Digest = await llm.GenerateDigestAsync(session);
+                        llmUsed = true;
+
+                        if (project != null && _projectStore != null)
+                        {
+                            SyncLlmResultsToProject(session, project);
+                            try { await _projectStore.WriteProjectJsonAsync(project); }
+                            catch (Exception ex) { Log.Warning(ex, "LLM 結果の project.json 反映失敗"); }
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "LLM 処理中にエラーが発生しました。ルールベースで続行します。");
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "LLM 処理中にエラーが発生しました。ルールベースで続行します。");
+                }
             }
         }
 
@@ -358,6 +467,8 @@ public class ManualSessionRecorder
             if (docxEnabled)
                 await _docxWriter.WriteAsync(session, Path.Combine(folder, fileBase + ".docx"), gap,
                     cfg.TemplateDotxPath);
+            if (htmlEnabled && project != null)
+                await new HtmlManualWriter().WriteAsync(project, Path.Combine(folder, fileBase + ".html"));
 
             _notifier?.ShowManualGeneratedToast(llmUsed);
 
@@ -369,6 +480,12 @@ public class ManualSessionRecorder
                     {
                         Type = ExportType.Markdown.ToString(),
                         OutputPath = Path.Combine("exports", fileBase + ".md"),
+                    });
+                if (htmlEnabled && _projectStore != null)
+                    await _projectStore.RecordExportAsync(project, new Models.ExportRecord
+                    {
+                        Type = ExportType.Html.ToString(),
+                        OutputPath = Path.Combine("exports", fileBase + ".html"),
                     });
 
                 // エクスポート完了時にフォルダを開く
