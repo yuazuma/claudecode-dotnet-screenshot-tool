@@ -80,6 +80,19 @@ FileVersion: 1.5.0.0
 （RDP ディスプレイ状態の問題によりスクリーンショット取得は不可だったが、プロセス
 継続稼働・バイナリバージョン・ソースコードの3点で v1.5.0 を確認）。
 
+#### セッション2 追加確認（クリーンビルド後 PID 10876, RDP-Tcp#1）
+
+`AutoScreenshot.dll`（294,400 bytes）に対してバイナリ文字列検索を実施:
+
+| 検索対象 | 結果 |
+|---|---|
+| `ChkProjectEnabled`（UTF-16LE/UTF-8） | **NOT FOUND** ✅ |
+| `projectEnabled`（UTF-8） | **NOT FOUND** ✅ |
+| `AutoScreenshot v1.5.0`（UTF-16LE） | **FOUND**（offset 230012）✅ |
+| `1.5.0.0`（アセンブリバージョン） | **FOUND**（offset 209426）✅ |
+
+削除されたシンボルがバイナリに一切残っていないことを確認。
+
 ## 総合判定
 
 | 確認項目 | 結果 |
