@@ -59,7 +59,15 @@ public partial class ProjectViewWindow : Window
         _config = config;
         _projectStore = projectStore;
         _exportService = exportService;
-        Loaded += async (_, _) => await RefreshProjectListAsync();
+        Loaded += async (_, _) =>
+        {
+            try { await RefreshProjectListAsync(); }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "プロジェクト一覧の初期読み込み失敗");
+                SetStatus("プロジェクトの読み込みに失敗しました。");
+            }
+        };
     }
 
     // ---- プロジェクト一覧 ----
@@ -748,10 +756,13 @@ public partial class ProjectViewWindow : Window
             imagePath = $"images/{destName}";
         }
 
-        int insertAfter = _selectedStepIndex >= 0 ? _selectedStepIndex : _stepVms.Count - 1;
-        int newStepNumber = insertAfter + 2; // 1-based, insert after current
+        // ビューインデックスではなく StepNumber を基準にする（削除済みステップが混在しても正しく挿入できる）
+        int afterStepNumber = _selectedStepIndex >= 0
+            ? _stepVms[_selectedStepIndex].Step.StepNumber
+            : (_selectedProject.Steps.Count > 0 ? _selectedProject.Steps.Max(s => s.StepNumber) : 0);
+        int newStepNumber = afterStepNumber + 1;
 
-        // Shift step numbers for steps after insertion point
+        // afterStepNumber 以降のステップ番号を 1 つシフト
         foreach (var s in _selectedProject.Steps.Where(s => s.StepNumber >= newStepNumber))
             s.StepNumber++;
 
@@ -765,7 +776,10 @@ public partial class ProjectViewWindow : Window
             DescriptionRuleBased = dlg.InputText.Trim(),
             ImagePath = imagePath,
         };
-        _selectedProject.Steps.Insert(insertAfter + 1, newStep);
+
+        // モデルリスト内の挿入位置を StepNumber で決定する
+        int insertIdx = _selectedProject.Steps.FindLastIndex(s => s.StepNumber < newStepNumber) + 1;
+        _selectedProject.Steps.Insert(insertIdx, newStep);
 
         await SaveProjectAsync();
         SetStatus($"ステップ {newStepNumber} を追加しました。");

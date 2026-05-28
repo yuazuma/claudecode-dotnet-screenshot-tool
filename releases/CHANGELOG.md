@@ -6,6 +6,29 @@
 
 ---
 
+## [1.5.1] — 2026-05-28
+
+### Fixed（修正）
+
+- **`ExportService`: 未使用の `BuildSession()` メソッドを削除**（デッドコード除去）
+  - `BuildAnnotatedSession()` に完全置き換え済みだったが旧メソッドが残存していた
+- **`VideoGenerator`: `Where(s => ... || true)` デッドコードを除去**
+  - 条件が常に `true` のため `.Where()` 全体が無意味だった。`.ToList()` に簡略化
+- **`ProjectViewWindow`: ステップ追加時の挿入位置バグを修正**
+  - `BtnAddStep_Click` がビューインデックス（`_selectedStepIndex`）を
+    モデルリスト（`_selectedProject.Steps`）のインデックスとして誤用していた
+  - 削除済みステップが存在すると挿入位置とステップ番号が両方ズレる問題を修正
+  - `StepNumber` ベースの挿入位置計算（`FindLastIndex`）に変更
+- **`ProjectViewWindow`: `Loaded` イベントハンドラーの未補足例外クラッシュを修正**
+  - `async void` ラムダから `RefreshProjectListAsync` の例外が伝播するとアプリがクラッシュしていた
+  - try-catch でラップし、失敗時はステータスバーにエラーメッセージを表示
+
+### Changed（変更）
+
+- バージョン: 1.5.0 → 1.5.1
+
+---
+
 ## [1.5.0] — 2026-05-28
 
 ### Removed（削除）

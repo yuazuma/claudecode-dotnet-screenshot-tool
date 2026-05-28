@@ -32,9 +32,7 @@ public class VideoGenerator
             return;
         }
 
-        var steps = session.Steps
-            .Where(s => s.ImagePath != null || true) // 画像なしステップも含む
-            .ToList();
+        var steps = session.Steps.ToList();
 
         if (steps.Count == 0)
         {

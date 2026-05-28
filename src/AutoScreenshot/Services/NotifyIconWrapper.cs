@@ -237,7 +237,7 @@ public class NotifyIconWrapper : IDisposable
         var item = new ToolStripMenuItem("バージョン情報");
         item.Click += (_, _) =>
             System.Windows.MessageBox.Show(
-                "AutoScreenshot v1.5.0\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
+                "AutoScreenshot v1.5.1\n\nタスクトレイ常駐型 自動スクリーンショット撮影・動画生成ツール",
                 "バージョン情報",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);

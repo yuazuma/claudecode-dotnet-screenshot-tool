@@ -304,45 +304,6 @@ public class ExportService
         foreach (var t in temps) try { File.Delete(t); } catch { }
     }
 
-    /// <summary>ProjectInfo から ManualSession を構築する（既存 Writer への橋渡し）。</summary>
-    private ManualSession BuildSession(ProjectInfo project)
-    {
-        var session = new ManualSession
-        {
-            Title    = project.Title,
-            EndedAt  = project.EndedAt?.LocalDateTime,
-            Digest   = project.Digest,
-        };
-
-        foreach (var ps in ActiveSteps(project))
-        {
-            // 画像パスをフルパスに変換
-            string? imagePath = ps.ImagePath != null
-                ? Path.Combine(project.ProjectFolder, ps.ImagePath.Replace('/', '\\'))
-                : null;
-
-            var step = new ManualStep
-            {
-                StepNumber         = ps.StepNumber,
-                Timestamp          = ps.Timestamp.LocalDateTime,
-                TriggerType        = Enum.TryParse<TriggerType>(ps.TriggerType, out var tt) ? tt : TriggerType.MouseLeftClick,
-                UiElementName      = ps.UiElementName,
-                UiControlType      = ps.UiControlType,
-                CursorPosition     = new System.Drawing.Point(ps.CursorX, ps.CursorY),
-                WindowTitle        = ps.WindowTitle,
-                ProcessName        = ps.ProcessName,
-                InputText          = ps.InputText,
-                KeyCodes           = ps.KeyCodes,
-                ImagePath          = imagePath,
-                DescriptionRuleBased = ps.DescriptionRuleBased,
-                DescriptionLlm     = ps.DescriptionOverride ?? ps.DescriptionLlm,
-                NeedsReview        = ps.NeedsReview,
-            };
-            session.Steps.Add(step);
-        }
-        return session;
-    }
-
     private async Task RecordExport(ProjectInfo project, ExportType type, string relPath)
     {
         await _projectStore.RecordExportAsync(project, new ExportRecord
