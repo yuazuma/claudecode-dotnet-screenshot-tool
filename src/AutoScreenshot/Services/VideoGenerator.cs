@@ -217,10 +217,10 @@ public class VideoGenerator
         // 最初に見つかった有効な画像のサイズを使用
         foreach (var s in steps)
         {
-            if (string.IsNullOrWhiteSpace(s.ImagePath) || !File.Exists(s.ImagePath)) continue;
+            if (string.IsNullOrWhiteSpace(s.AfterImagePath) || !File.Exists(s.AfterImagePath)) continue;
             try
             {
-                using var bmp = System.Drawing.Image.FromFile(s.ImagePath);
+                using var bmp = System.Drawing.Image.FromFile(s.AfterImagePath);
                 return new Size(bmp.Width % 2 == 0 ? bmp.Width : bmp.Width - 1,
                                 bmp.Height % 2 == 0 ? bmp.Height : bmp.Height - 1);
             }

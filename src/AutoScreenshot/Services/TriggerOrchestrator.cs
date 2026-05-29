@@ -27,6 +27,10 @@ public class TriggerOrchestrator : IDisposable
     private DateTime _lastMouseActivity = DateTime.MinValue;
     private System.Threading.Timer? _keyboardIdleTimer;
 
+    // 操作前スクリーンショットの一時保持（before → after の相関用）
+    private readonly Dictionary<TriggerType, (string path, DateTime capturedAt)> _pendingBeforeShots = [];
+    private readonly object _pendingLock = new();
+
     public TriggerOrchestrator(
         ConfigStore config, HookService hook, CaptureService capture,
         FileStorage storage, DiffDetector diffDetector,
@@ -43,7 +47,9 @@ public class TriggerOrchestrator : IDisposable
         _masking = masking;
         _manualRecorder = manualRecorder;
 
+        _hook.MouseBeforeEvent += OnMouseBeforeEvent;
         _hook.MouseEvent += OnMouseEvent;
+        _hook.KeyboardBeforeEvent += OnKeyboardBeforeEvent;
         _hook.KeyboardActivity += OnKeyboardActivity;
         _hook.ActiveWindowChanged += OnActiveWindowChanged;
 
@@ -72,6 +78,104 @@ public class TriggerOrchestrator : IDisposable
             _diffIntervalMs = newMs;
             _diffTimer.Change(_diffIntervalMs, _diffIntervalMs);
             Log.Information("差分検知タイマー間隔を更新: {Interval}ms", _diffIntervalMs);
+        }
+    }
+
+    private void OnMouseBeforeEvent(object? sender, TriggerType triggerType)
+    {
+        if (_paused) return;
+        if (!_config.Config.Triggers.CaptureBeforeImage) return;
+
+        bool enabled = triggerType switch
+        {
+            TriggerType.MouseLeftClick   => _config.Config.Triggers.MouseLeftClick || _config.Config.Triggers.MouseDragDrop,
+            TriggerType.MouseRightClick  => _config.Config.Triggers.MouseRightClick,
+            TriggerType.MouseMiddleClick => _config.Config.Triggers.MouseMiddleClick,
+            _ => false,
+        };
+        if (!enabled) return;
+        if (IsExcludedApp()) return;
+
+        Task.Run(() => FireBeforeCapture(triggerType));
+    }
+
+    private void OnKeyboardBeforeEvent(object? sender, EventArgs e)
+    {
+        if (_paused || !_config.Config.Triggers.Keyboard) return;
+        if (!_config.Config.Triggers.CaptureBeforeImage) return;
+        if (IsExcludedApp()) return;
+
+        Task.Run(() => FireBeforeCapture(TriggerType.Keyboard));
+    }
+
+    private async Task FireBeforeCapture(TriggerType trigger)
+    {
+        try
+        {
+            NativeMethods.GetCursorPos(out var pt);
+            var cursorPos = new System.Drawing.Point(pt.X, pt.Y);
+            string title = GetActiveWindowTitle();
+            string procName = GetActiveProcessName();
+            var now = DateTime.Now;
+
+            var screenshots = _capture.CaptureAllScreens();
+            var cfg = _config.Config;
+
+            string? firstBeforePath = null;
+            foreach (var (bmp, monitorIdx, bounds) in screenshots)
+            {
+                // before: プライバシーマスキングのみ適用。オーバーレイ・タイムスタンプ焼き込みは行わない
+                if (cfg.Privacy.MaskPasswordFields)
+                    _masking.ApplyMasking(bmp, bounds);
+
+                byte[] data = _capture.Encode(bmp, Models.ImageFormat.Png);
+                bmp.Dispose();
+
+                var evt = new TriggerEvent(trigger, now, cursorPos, title, procName, monitorIdx);
+                string? path = await _storage.SaveBeforeAsync(data, evt);
+
+                if (firstBeforePath == null) firstBeforePath = path;
+            }
+
+            if (firstBeforePath != null)
+            {
+                var key = NormalizeBeforeKey(trigger);
+                lock (_pendingLock)
+                {
+                    _pendingBeforeShots[key] = (firstBeforePath, DateTime.UtcNow);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "FireBeforeCapture 失敗: {Trigger}", trigger);
+        }
+    }
+
+    private static TriggerType NormalizeBeforeKey(TriggerType trigger) => trigger switch
+    {
+        TriggerType.MouseDragDrop => TriggerType.MouseLeftClick,
+        _ => trigger,
+    };
+
+    private string? TakeBeforeShot(TriggerType trigger)
+    {
+        var key = NormalizeBeforeKey(trigger);
+        lock (_pendingLock)
+        {
+            if (_pendingBeforeShots.TryGetValue(key, out var entry))
+            {
+                _pendingBeforeShots.Remove(key);
+                // キーボードは入力継続時間が不定のため、アイドル時間 + バッファで有効期限を延長する。
+                // マウスは before/after が数秒以内に対応するため 5 秒で十分。
+                double maxAgeSec = trigger == TriggerType.Keyboard
+                    ? _config.Config.Triggers.KeyboardIdleSeconds + 10.0
+                    : 5.0;
+                if ((DateTime.UtcNow - entry.capturedAt).TotalSeconds <= maxAgeSec)
+                    return entry.path;
+                Log.Debug("before 画像期限切れ: {Trigger}", trigger);
+            }
+            return null;
         }
     }
 
@@ -156,6 +260,9 @@ public class TriggerOrchestrator : IDisposable
     private void FireCapture(TriggerType trigger, IReadOnlyList<int>? screenIndices = null,
         (string inputText, string keyCodes)? keyboardInput = null)
     {
+        // before 画像をここで取得（after 撮影の前に先行して保存されている想定）
+        string? beforePath = TakeBeforeShot(trigger);
+
         Task.Run(async () =>
         {
             try
@@ -215,7 +322,7 @@ public class TriggerOrchestrator : IDisposable
                         InputText = keyboardInput?.inputText.Length > 0 ? keyboardInput.Value.inputText : null,
                         KeyCodes  = keyboardInput?.keyCodes.Length > 0  ? keyboardInput.Value.keyCodes  : null,
                     };
-                    await _manualRecorder.RecordStepAsync(stepEvt, firstMonitorPath, firstMonitorBounds);
+                    await _manualRecorder.RecordStepAsync(stepEvt, firstMonitorPath, firstMonitorBounds, beforePath);
                 }
 
                 _notifier.OnCaptured();
@@ -292,8 +399,11 @@ public class TriggerOrchestrator : IDisposable
         _config.ConfigChanged -= OnConfigChanged;
         _diffTimer.Dispose();
         _keyboardIdleTimer?.Dispose();
+        _hook.MouseBeforeEvent -= OnMouseBeforeEvent;
         _hook.MouseEvent -= OnMouseEvent;
+        _hook.KeyboardBeforeEvent -= OnKeyboardBeforeEvent;
         _hook.KeyboardActivity -= OnKeyboardActivity;
         _hook.ActiveWindowChanged -= OnActiveWindowChanged;
+        lock (_pendingLock) { _pendingBeforeShots.Clear(); }
     }
 }

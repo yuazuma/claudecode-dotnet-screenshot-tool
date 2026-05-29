@@ -243,8 +243,18 @@ public class DocxManualWriter
                     string review = step.NeedsReview ? "　※要確認" : "";
                     body.Append(Para($"{stepCount}. {desc}{review}", "Normal"));
 
-                    if (!string.IsNullOrEmpty(step.ImagePath) && File.Exists(step.ImagePath))
-                        TryAppendImage(body, mainPart, step.ImagePath, stepCount);
+                    bool hasBefore = !string.IsNullOrEmpty(step.BeforeImagePath) && File.Exists(step.BeforeImagePath);
+                    bool hasAfter  = !string.IsNullOrEmpty(step.AfterImagePath)  && File.Exists(step.AfterImagePath);
+                    if (hasBefore)
+                    {
+                        body.Append(Para("操作前", "Heading3"));
+                        TryAppendImage(body, mainPart, step.BeforeImagePath!, stepCount);
+                    }
+                    if (hasAfter)
+                    {
+                        if (hasBefore) body.Append(Para("操作後", "Heading3"));
+                        TryAppendImage(body, mainPart, step.AfterImagePath!, stepCount);
+                    }
                 }
             }
         }

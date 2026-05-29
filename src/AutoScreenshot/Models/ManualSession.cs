@@ -25,7 +25,12 @@ public class ManualStep
     public string ProcessName { get; set; } = "";
     public string? InputText { get; set; }
     public string? KeyCodes { get; set; }
-    public string? ImagePath { get; set; }
+    /// <summary>操作後スクリーンショットのフルパス（設定フォーマット）。アノテーション付与可。</summary>
+    public string? AfterImagePath { get; set; }
+
+    /// <summary>操作前スクリーンショットのフルパス（PNG 固定・証跡）。アノテーション付与不可。</summary>
+    public string? BeforeImagePath { get; set; }
+
     public string DescriptionRuleBased { get; set; } = "";
     public string? DescriptionLlm { get; set; }
     public bool NeedsReview { get; set; }

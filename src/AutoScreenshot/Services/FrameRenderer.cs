@@ -31,7 +31,7 @@ public class FrameRenderer
     /// クリック系は波紋フレームを 3 枚追加する（先頭が元画像、以降が波紋）。</summary>
     public List<Bitmap> Render(ManualStep step, Size targetSize)
     {
-        Bitmap? source = LoadImage(step.ImagePath);
+        Bitmap? source = LoadImage(step.AfterImagePath);
         if (source == null)
         {
             // 画像なし → 黒フレームで代用

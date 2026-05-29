@@ -160,16 +160,29 @@
 
                 <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
 
-                <!-- ステップ詳細（画像 → アノテーション → ステップ情報） -->
+                <!-- ステップ詳細（before → after + アノテーション → ステップ情報） -->
                 <Grid Grid.Column="2">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="260"/>   <!-- 画像プレビュー固定高さ -->
+                        <RowDefinition Height="Auto"/>  <!-- 操作前画像（折りたたみ、最大 120px） -->
+                        <RowDefinition Height="230"/>   <!-- アノテーション Canvas -->
                         <RowDefinition Height="Auto"/>  <!-- アノテーションツール（折りたたみ） -->
                         <RowDefinition Height="*"/>     <!-- ステップ詳細（残領域） -->
                     </Grid.RowDefinitions>
 
-                    <!-- 画像プレビュー + アノテーション Canvas -->
-                    <Border Grid.Row="0" Background="#D8D8D8">
+                    <!-- 操作前画像（証跡・読み取り専用） -->
+                    <Border x:Name="PnlBeforeImage" Grid.Row="0" Background="#EEEEEE"
+                            Visibility="Collapsed" MaxHeight="120" Margin="0,0,0,2">
+                        <StackPanel>
+                            <TextBlock Text="操作前（証跡）" FontSize="10" Foreground="Gray"
+                                       HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                            <Image x:Name="ImgBefore" Stretch="Uniform" MaxHeight="96"
+                                   HorizontalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 操作後画像（アノテーション Canvas） -->
+                    <Border Grid.Row="1" Background="#D8D8D8">
                         <Grid x:Name="AnnGrid">
                             <Image x:Name="ImgAnnotation" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality"
@@ -183,7 +196,7 @@
                     </Border>
 
                     <!-- アノテーションツール（折りたたみ） -->
-                    <Expander x:Name="ExpAnnotation" Grid.Row="1"
+                    <Expander x:Name="ExpAnnotation" Grid.Row="2"
                               Header="アノテーション" IsExpanded="False" Margin="0,2,0,0">
                         <StackPanel Margin="6,4,6,6">
                             <!-- ツール + 色（1行） -->
@@ -223,7 +236,7 @@
                     </Expander>
 
                     <!-- ステップ詳細（情報・説明文・操作ボタン） -->
-                    <GroupBox Grid.Row="2" Header="ステップ詳細" Margin="0,4,0,0">
+                    <GroupBox Grid.Row="3" Header="ステップ詳細" Margin="0,4,0,0">
                         <Grid Margin="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

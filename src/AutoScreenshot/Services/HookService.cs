@@ -35,11 +35,16 @@ public class HookService : IDisposable
     private bool _ctrlDown;
     private bool _altDown;
 
+    // キーボードセッション追跡（before 撮影用）
+    private bool _inKeyboardSession;
+
+    public event EventHandler<TriggerType>? MouseBeforeEvent;
     public event EventHandler<TriggerType>? MouseEvent;
+    public event EventHandler? KeyboardBeforeEvent;
     public event EventHandler? KeyboardActivity;
     public event EventHandler? ActiveWindowChanged;
 
-    /// <summary>蓄積されたキーボード入力を取り出してバッファをクリアする。</summary>
+    /// <summary>蓄積されたキーボード入力を取り出してバッファをクリアする。セッションフラグもリセット。</summary>
     public (string inputText, string keyCodes) TakeAccumulatedKeys()
     {
         lock (_keyBufLock)
@@ -48,6 +53,7 @@ public class HookService : IDisposable
             string codes = string.Join(", ", _keyCodeBuf);
             _inputTextBuf.Clear();
             _keyCodeBuf.Clear();
+            _inKeyboardSession = false;
             return (text, codes);
         }
     }
@@ -117,32 +123,42 @@ public class HookService : IDisposable
             switch (msg)
             {
                 case NativeMethods.WM_LBUTTONDOWN:
-                    // ドラッグ検知のため押下時刻を記録するのみ。クリック判定は UP で行う。
                     _lbDownTime = DateTime.UtcNow;
+                    MouseBeforeEvent?.Invoke(this, TriggerType.MouseLeftClick);
                     break;
 
                 case NativeMethods.WM_LBUTTONUP:
+                {
                     double elapsedMs = (DateTime.UtcNow - _lbDownTime).TotalMilliseconds;
+                    TriggerType afterTrigger;
                     if (_lbDownTime != DateTime.MinValue && elapsedMs >= cfg.DragThresholdMs)
                     {
-                        // ドラッグ完了
                         Log.Debug("HookService: ドラッグ検知 ({Ms:F0}ms)", elapsedMs);
-                        MouseEvent?.Invoke(this, TriggerType.MouseDragDrop);
+                        afterTrigger = TriggerType.MouseDragDrop;
                     }
                     else
                     {
-                        // 通常クリック
-                        MouseEvent?.Invoke(this, TriggerType.MouseLeftClick);
+                        afterTrigger = TriggerType.MouseLeftClick;
                     }
                     _lbDownTime = DateTime.MinValue;
+                    FireAfterDelayed(afterTrigger, cfg.PostClickDelayMs);
                     break;
+                }
 
                 case NativeMethods.WM_RBUTTONDOWN:
-                    MouseEvent?.Invoke(this, TriggerType.MouseRightClick);
+                    MouseBeforeEvent?.Invoke(this, TriggerType.MouseRightClick);
+                    break;
+
+                case NativeMethods.WM_RBUTTONUP:
+                    FireAfterDelayed(TriggerType.MouseRightClick, cfg.PostClickDelayMs);
                     break;
 
                 case NativeMethods.WM_MBUTTONDOWN:
-                    MouseEvent?.Invoke(this, TriggerType.MouseMiddleClick);
+                    MouseBeforeEvent?.Invoke(this, TriggerType.MouseMiddleClick);
+                    break;
+
+                case NativeMethods.WM_MBUTTONUP:
+                    FireAfterDelayed(TriggerType.MouseMiddleClick, cfg.PostClickDelayMs);
                     break;
 
                 case NativeMethods.WM_MOUSEWHEEL:
@@ -157,6 +173,21 @@ public class HookService : IDisposable
             }
         }
         return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+    }
+
+    private void FireAfterDelayed(TriggerType trigger, int delayMs)
+    {
+        if (delayMs <= 0)
+        {
+            MouseEvent?.Invoke(this, trigger);
+            return;
+        }
+        var t = trigger;
+        Task.Run(async () =>
+        {
+            await Task.Delay(delayMs).ConfigureAwait(false);
+            MouseEvent?.Invoke(this, t);
+        });
     }
 
     private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -192,6 +223,11 @@ public class HookService : IDisposable
             if (isDown)
             {
                 Log.Debug("HookService: キー入力検知");
+                if (!_inKeyboardSession)
+                {
+                    _inKeyboardSession = true;
+                    KeyboardBeforeEvent?.Invoke(this, EventArgs.Empty);
+                }
                 AccumulateKey(vk);
                 KeyboardActivity?.Invoke(this, EventArgs.Empty);
             }

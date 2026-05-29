@@ -61,13 +61,13 @@ public class HtmlManualWriter
             string window = System.Net.WebUtility.HtmlEncode(step.WindowTitle);
             string ts = step.Timestamp.LocalDateTime.ToString("HH:mm:ss");
 
-            string imgTag = BuildImageTag(project.ProjectFolder, step);
+            string imagesSection = BuildImagesSection(project.ProjectFolder, step);
 
             sb.AppendLine($"""
                 <section id="step-{step.StepNumber}" class="step">
                   <h2>ステップ {step.StepNumber}</h2>
                   <p class="step-meta">{trigger} &mdash; {ts} &mdash; {window}</p>
-                  {imgTag}
+                  {imagesSection}
                   <p class="step-desc">{desc}</p>
                 </section>
                 """);
@@ -81,11 +81,42 @@ public class HtmlManualWriter
         Log.Information("HTML 手順書を生成: {Path}", outputPath);
     }
 
-    private static string BuildImageTag(string projectFolder, ProjectStep step)
+    private static string BuildImagesSection(string projectFolder, ProjectStep step)
     {
-        if (step.ImagePath == null) return "<div class=\"no-image\">(画像なし)</div>";
+        string beforeTag = BuildBeforeImageTag(projectFolder, step);
+        string afterTag  = BuildAfterImageTag(projectFolder, step);
 
-        string fullPath = Path.Combine(projectFolder, step.ImagePath.Replace('/', '\\'));
+        if (string.IsNullOrEmpty(beforeTag))
+            return afterTag;
+
+        return $"<div class=\"step-images\">" +
+               $"<figure class=\"before\"><figcaption>操作前</figcaption>{beforeTag}</figure>" +
+               $"<figure class=\"after\"><figcaption>操作後</figcaption>{afterTag}</figure>" +
+               $"</div>";
+    }
+
+    private static string BuildBeforeImageTag(string projectFolder, ProjectStep step)
+    {
+        if (step.BeforeImagePath == null) return string.Empty;
+        string fullPath = Path.Combine(projectFolder, step.BeforeImagePath.Replace('/', '\\'));
+        if (!File.Exists(fullPath)) return string.Empty;
+        try
+        {
+            string base64 = Convert.ToBase64String(File.ReadAllBytes(fullPath));
+            return $"<img src=\"data:image/png;base64,{base64}\" alt=\"操作前\" loading=\"lazy\">";
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "HTML 用 before 画像読み込み失敗: {Path}", fullPath);
+            return string.Empty;
+        }
+    }
+
+    private static string BuildAfterImageTag(string projectFolder, ProjectStep step)
+    {
+        if (step.AfterImagePath == null) return "<div class=\"no-image\">(画像なし)</div>";
+
+        string fullPath = Path.Combine(projectFolder, step.AfterImagePath.Replace('/', '\\'));
         if (!File.Exists(fullPath)) return "<div class=\"no-image\">(画像ファイルが見つかりません)</div>";
 
         try
@@ -95,7 +126,6 @@ public class HtmlManualWriter
 
             if (step.Annotations?.Count > 0)
             {
-                // アノテーション焼き込み → PNG として Base64 化
                 using var bmp = AnnotationRenderer.Render(fullPath, step.Annotations);
                 if (bmp != null)
                 {
@@ -117,11 +147,11 @@ public class HtmlManualWriter
             }
 
             string base64 = Convert.ToBase64String(imageBytes);
-            return $"<img src=\"data:{mime};base64,{base64}\" alt=\"ステップ画像\" loading=\"lazy\">";
+            return $"<img src=\"data:{mime};base64,{base64}\" alt=\"操作後\" loading=\"lazy\">";
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "HTML 用画像の読み込み失敗: {Path}", fullPath);
+            Log.Warning(ex, "HTML 用 after 画像読み込み失敗: {Path}", fullPath);
             return "<div class=\"no-image\">(画像の読み込みに失敗しました)</div>";
         }
     }
@@ -186,8 +216,20 @@ public class HtmlManualWriter
         .step img {
           width: 100%; max-width: 800px;
           border: 1px solid var(--border); border-radius: 4px;
-          margin-bottom: 12px; display: block;
+          margin-bottom: 4px; display: block;
         }
+        .step-images {
+          display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+        }
+        .step-images figure {
+          flex: 1 1 45%; min-width: 200px; margin: 0;
+        }
+        .step-images figcaption {
+          font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px;
+          font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+        }
+        .step-images img { margin-bottom: 0; }
+        figure.before img { opacity: 0.85; }
         .step-desc { font-size: 0.95rem; }
         .no-image {
           background: #f0f0f0; color: var(--text-muted);

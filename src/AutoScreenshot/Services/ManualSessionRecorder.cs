@@ -75,7 +75,8 @@ public class ManualSessionRecorder
     }
 
     /// <summary>TriggerOrchestrator から呼ばれる。イベントとスクリーンショットパスを記録する。</summary>
-    public async Task RecordStepAsync(TriggerEvent evt, string? imagePath, System.Drawing.Rectangle monitorBounds)
+    public async Task RecordStepAsync(TriggerEvent evt, string? imagePath, System.Drawing.Rectangle monitorBounds,
+        string? beforeImagePath = null)
     {
         var cfg = _config.Config.ManualGen;
         if (!cfg.Enabled) return;
@@ -133,18 +134,19 @@ public class ManualSessionRecorder
 
             step = new ManualStep
             {
-                StepNumber     = _current.Steps.Count + 1,
-                Timestamp      = evt.Timestamp,
-                TriggerType    = evt.Type,
-                UiElementName  = uiName,
-                UiControlType  = ctrlType,
-                CursorPosition = evt.CursorPosition,
-                WindowTitle    = evt.ActiveWindowTitle,
-                ProcessName    = evt.ActiveProcessName,
-                ImagePath      = includeImage ? imagePath : null,
-                NeedsReview    = needsReview,
-                InputText      = inputText,
-                KeyCodes       = keyCodes,
+                StepNumber      = _current.Steps.Count + 1,
+                Timestamp       = evt.Timestamp,
+                TriggerType     = evt.Type,
+                UiElementName   = uiName,
+                UiControlType   = ctrlType,
+                CursorPosition  = evt.CursorPosition,
+                WindowTitle     = evt.ActiveWindowTitle,
+                ProcessName     = evt.ActiveProcessName,
+                AfterImagePath  = includeImage ? imagePath : null,
+                BeforeImagePath = includeImage ? beforeImagePath : null,
+                NeedsReview     = needsReview,
+                InputText       = inputText,
+                KeyCodes        = keyCodes,
             };
             step.DescriptionRuleBased = RuleBasedDescriber.Describe(step);
             _current.Steps.Add(step);
@@ -152,27 +154,41 @@ public class ManualSessionRecorder
 
         if (_projectStore != null && step != null)
         {
-            _ = RecordProjectStepAsync(step, imagePath);
+            _ = RecordProjectStepAsync(step, imagePath, beforeImagePath);
         }
     }
 
-    private async Task RecordProjectStepAsync(ManualStep step, string? imagePath)
+    private async Task RecordProjectStepAsync(ManualStep step, string? imagePath, string? beforeImagePath)
     {
         ProjectInfo? project;
         lock (_lock) { project = _currentProject; }
         if (project == null) return;
 
+        int maxWidth = _config.Config.Project.ThumbnailMaxWidth;
+
+        // after 画像のサムネイル生成
         string? thumbRelPath = null;
         if (imagePath != null && File.Exists(imagePath))
         {
             string thumbFileName = $"step_{step.StepNumber:D3}.jpg";
             string thumbPath = Path.Combine(project.ProjectFolder, "thumbs", thumbFileName);
             thumbRelPath = $"thumbs/{thumbFileName}";
-            int maxWidth = _config.Config.Project.ThumbnailMaxWidth;
             _ = ThumbnailService.GenerateAsync(imagePath, thumbPath, maxWidth);
         }
 
-        // images/ 配下への相対パス
+        // before 画像のサムネイル生成
+        string? beforeRelPath = null;
+        string? beforeThumbRelPath = null;
+        if (beforeImagePath != null && File.Exists(beforeImagePath))
+        {
+            beforeRelPath = Path.GetRelativePath(project.ProjectFolder, beforeImagePath).Replace('\\', '/');
+            string beforeThumbFileName = $"step_{step.StepNumber:D3}_before.jpg";
+            string beforeThumbPath = Path.Combine(project.ProjectFolder, "thumbs", "before", beforeThumbFileName);
+            beforeThumbRelPath = $"thumbs/before/{beforeThumbFileName}";
+            _ = ThumbnailService.GenerateAsync(beforeImagePath, beforeThumbPath, maxWidth);
+        }
+
+        // after 画像の相対パス
         string? imageRelPath = imagePath != null
             ? Path.GetRelativePath(project.ProjectFolder, imagePath).Replace('\\', '/')
             : null;
@@ -190,8 +206,10 @@ public class ManualSessionRecorder
             ProcessName          = step.ProcessName,
             InputText            = step.InputText,
             KeyCodes             = step.KeyCodes,
-            ImagePath            = imageRelPath,
-            ThumbPath            = thumbRelPath,
+            AfterImagePath       = imageRelPath,
+            AfterThumbPath       = thumbRelPath,
+            BeforeImagePath      = beforeRelPath,
+            BeforeThumbPath      = beforeThumbRelPath,
             DescriptionRuleBased = step.DescriptionRuleBased,
             DescriptionLlm       = step.DescriptionLlm,
             NeedsReview          = step.NeedsReview,

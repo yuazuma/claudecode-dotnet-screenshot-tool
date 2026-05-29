@@ -51,6 +51,10 @@ public partial class SettingsWindow : Window
         SldrCooldownWindow.Value   = cfg.Triggers.CooldownActiveWindow;
         SldrCooldownDiff.Value     = cfg.Triggers.CooldownScreenDiff;
 
+        // 操作前後スクリーンショット
+        ChkCaptureBeforeImage.IsChecked = cfg.Triggers.CaptureBeforeImage;
+        TxtPostClickDelayMs.Text        = cfg.Triggers.PostClickDelayMs.ToString();
+
         // 保存
         TxtSaveFolder.Text = cfg.Storage.SaveFolder;
         RdoPng.IsChecked   = cfg.Storage.ImageFormat == ImageFormat.Png;
@@ -157,6 +161,9 @@ public partial class SettingsWindow : Window
             cfg.Triggers.MouseDragDrop      = ChkMouseDrag.IsChecked == true;
             cfg.Triggers.MouseWheel         = ChkMouseWheel.IsChecked == true;
             cfg.Triggers.Keyboard           = ChkKeyboard.IsChecked == true;
+            cfg.Triggers.CaptureBeforeImage = ChkCaptureBeforeImage.IsChecked == true;
+            cfg.Triggers.PostClickDelayMs   = int.TryParse(TxtPostClickDelayMs.Text, out int delay)
+                                              ? Math.Clamp(delay, 0, 2000) : 250;
             cfg.Triggers.ActiveWindowChange = ChkActiveWindow.IsChecked == true;
             cfg.Triggers.ScreenDiff         = ChkScreenDiff.IsChecked == true;
 

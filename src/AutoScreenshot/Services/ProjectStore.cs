@@ -141,8 +141,10 @@ public class ProjectStore
             {
                 var newStep = CloneStep(step, stepNum);
 
-                newStep.ImagePath = CopyImageFile(src.ProjectFolder, step.ImagePath, merged.ProjectFolder, "images", stepNum);
-                newStep.ThumbPath = CopyImageFile(src.ProjectFolder, step.ThumbPath, merged.ProjectFolder, "thumbs", stepNum);
+                newStep.AfterImagePath  = CopyImageFile(src.ProjectFolder, step.AfterImagePath,  merged.ProjectFolder, "images",        stepNum);
+                newStep.AfterThumbPath  = CopyImageFile(src.ProjectFolder, step.AfterThumbPath,  merged.ProjectFolder, "thumbs",        stepNum);
+                newStep.BeforeImagePath = CopyImageFile(src.ProjectFolder, step.BeforeImagePath, merged.ProjectFolder, "images/before", stepNum, "_before");
+                newStep.BeforeThumbPath = CopyImageFile(src.ProjectFolder, step.BeforeThumbPath, merged.ProjectFolder, "thumbs/before", stepNum, "_before");
 
                 merged.Steps.Add(newStep);
                 stepNum++;
@@ -169,8 +171,10 @@ public class ProjectStore
             var dest = isAfter ? after : before;
             int num = isAfter ? numAfter++ : numBefore++;
             var newStep = CloneStep(step, num);
-            newStep.ImagePath = CopyImageFile(source.ProjectFolder, step.ImagePath, dest.ProjectFolder, "images", num);
-            newStep.ThumbPath = CopyImageFile(source.ProjectFolder, step.ThumbPath, dest.ProjectFolder, "thumbs", num);
+            newStep.AfterImagePath  = CopyImageFile(source.ProjectFolder, step.AfterImagePath,  dest.ProjectFolder, "images",        num);
+            newStep.AfterThumbPath  = CopyImageFile(source.ProjectFolder, step.AfterThumbPath,  dest.ProjectFolder, "thumbs",        num);
+            newStep.BeforeImagePath = CopyImageFile(source.ProjectFolder, step.BeforeImagePath, dest.ProjectFolder, "images/before", num, "_before");
+            newStep.BeforeThumbPath = CopyImageFile(source.ProjectFolder, step.BeforeThumbPath, dest.ProjectFolder, "thumbs/before", num, "_before");
             dest.Steps.Add(newStep);
         }
 
@@ -180,14 +184,14 @@ public class ProjectStore
         return (before, after);
     }
 
-    private static string? CopyImageFile(string srcFolder, string? relPath, string destFolder, string subDir, int stepNum)
+    private static string? CopyImageFile(string srcFolder, string? relPath, string destFolder, string subDir, int stepNum, string? suffix = null)
     {
         if (relPath == null) return null;
         string src = Path.Combine(srcFolder, relPath.Replace('/', '\\'));
         if (!File.Exists(src)) return null;
         string ext = Path.GetExtension(src);
-        string newName = $"step_{stepNum:D3}{ext}";
-        string destDir = Path.Combine(destFolder, subDir);
+        string newName = suffix != null ? $"step_{stepNum:D3}{suffix}{ext}" : $"step_{stepNum:D3}{ext}";
+        string destDir = Path.Combine(destFolder, subDir.Replace('/', '\\'));
         Directory.CreateDirectory(destDir);
         string dest = Path.Combine(destDir, newName);
         File.Copy(src, dest, overwrite: true);

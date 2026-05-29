@@ -63,6 +63,20 @@ public class FileStorage
         return path;
     }
 
+    /// <summary>操作前スクリーンショットをプロジェクトの images/before/ に PNG で保存する。
+    /// プロジェクトフォルダが未設定の場合は null を返す。</summary>
+    public async Task<string?> SaveBeforeAsync(byte[] imageData, TriggerEvent evt)
+    {
+        if (_projectImagesFolder == null) return null;
+        string beforeFolder = Path.Combine(_projectImagesFolder, "before");
+        Directory.CreateDirectory(beforeFolder);
+        string fileName = BuildFileName(evt, "png");
+        string path = Path.Combine(beforeFolder, fileName);
+        await File.WriteAllBytesAsync(path, imageData);
+        Log.Debug("before 画像保存: {Path}", path);
+        return path;
+    }
+
     public IReadOnlyList<string> GetRecentPaths()
     {
         lock (_recentPaths) { return [.. _recentPaths.Reverse()]; }

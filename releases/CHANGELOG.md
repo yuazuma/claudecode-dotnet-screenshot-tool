@@ -6,6 +6,46 @@
 
 ---
 
+## [1.6.0] — 2026-05-29
+
+### Added（追加）
+
+- **操作前後スクリーンショット分離（FR-F）**
+  - マウスボタン押下（DOWN）時に操作前 (before) スクリーンショットを PNG で自動取得
+  - マウスボタン離放（UP）後 `PostClickDelayMs`（既定 250ms）遅延してから操作後 (after) を撮影
+  - キーボードは新シーケンス開始時に before を取得、アイドル後に after を取得（既存動作）
+  - before 画像はプロジェクト内 `images/before/` に PNG 固定で保存（劣化なし・証跡用途）
+  - before 画像にはアノテーション・カーソルオーバーレイ・タイムスタンプ焼き込みを適用しない
+  - before サムネイルを `thumbs/before/step_NNN_before.jpg` に自動生成
+  - Markdown・Word・HTML エクスポートで before → after の順に 2 枚出力
+  - HTML では before/after を横並び表示（`<figure>` タグで「操作前」「操作後」キャプション付き）
+  - 画像エクスポート（FR-PJ04）で before を `exports/images/before/` サブフォルダにコピー
+  - ProjectViewWindow ステップ詳細エリアに before 画像表示エリアを追加（読み取り専用）
+
+- **設定項目追加**（「撮影トリガー」タブ）
+  - `CaptureBeforeImage`（bool, 既定: オン）— 操作前スクリーンショット取得の有効/無効
+  - `PostClickDelayMs`（int, 既定: 250ms）— 操作後撮影の遅延時間（50〜2000ms 推奨）
+
+### Changed（変更）
+
+- バージョン: 1.5.1 → 1.6.0
+- **データモデル統一**（命名規則整理）
+  - `ProjectStep.ImagePath` → `AfterImagePath`（JSON フィールド名: `afterImagePath`）
+  - `ProjectStep.ThumbPath` → `AfterThumbPath`（JSON フィールド名: `afterThumbPath`）
+  - `ManualStep.ImagePath` → `AfterImagePath`
+  - 旧 `project.json`（`imagePath` / `thumbPath`）はロード時に自動移行（書き込み時に新形式へ）
+- 右クリック・中クリックのイベント発火タイミングを `WM_RBUTTONDOWN`（即時）→ `WM_RBUTTONUP` + 遅延に変更
+  （before 分離のための仕様変更）
+- `VideoGenerator` / `FrameRenderer` は `AfterImagePath`（操作後画像）のみを動画フレームに使用
+
+### Fixed（修正）
+
+- **キーボード before 画像の期限切れ問題**
+  - 長時間入力時（5 秒超）に before 画像が期限切れで破棄される問題を修正
+  - Keyboard の有効期限を一律 5 秒から `KeyboardIdleSeconds + 10 秒` に変更（既定 12 秒）
+
+---
+
 ## [1.5.1] — 2026-05-28
 
 ### Fixed（修正）

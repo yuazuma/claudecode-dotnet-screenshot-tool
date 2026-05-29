@@ -63,6 +63,13 @@ public class TriggerConfig
     // 画面差分
     public int ScreenDiffIntervalSeconds { get; set; } = 3;
     public double ScreenDiffThresholdPercent { get; set; } = 30.0;
+
+    // 操作前後スクリーンショット
+    /// <summary>クリック前スクリーンショットを取得する（PNG 固定・証跡）。</summary>
+    public bool CaptureBeforeImage { get; set; } = true;
+
+    /// <summary>クリック操作後の撮影遅延（ミリ秒）。アプリ画面更新を待つ。</summary>
+    public int PostClickDelayMs { get; set; } = 250;
 }
 
 public class StorageConfig

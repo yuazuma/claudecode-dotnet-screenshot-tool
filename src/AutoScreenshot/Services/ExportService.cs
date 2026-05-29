@@ -51,12 +51,29 @@ public class ExportService
             int n = 0;
             foreach (var step in steps)
             {
-                if (step.ImagePath == null) continue;
+                if (step.AfterImagePath == null) continue;
                 var (srcPath, isTemp) = ResolveAnnotatedImagePath(project, step);
                 if (!File.Exists(srcPath)) { if (isTemp) try { File.Delete(srcPath); } catch { } continue; }
-                string dest = Path.Combine(outDir, $"{++n:D3}_{Path.GetFileName(step.ImagePath)}");
+                string dest = Path.Combine(outDir, $"{++n:D3}_{Path.GetFileName(step.AfterImagePath)}");
                 File.Copy(srcPath, dest, overwrite: true);
                 if (isTemp) try { File.Delete(srcPath); } catch { }
+            }
+
+            // before 画像を before/ サブフォルダにコピー（アノテーションなし・PNG 元画像）
+            bool anyBefore = steps.Any(s => s.BeforeImagePath != null);
+            if (anyBefore)
+            {
+                string beforeOutDir = Path.Combine(outDir, "before");
+                Directory.CreateDirectory(beforeOutDir);
+                int nb = 0;
+                foreach (var step in steps)
+                {
+                    if (step.BeforeImagePath == null) continue;
+                    string beforeSrc = Path.Combine(project.ProjectFolder, step.BeforeImagePath.Replace('/', '\\'));
+                    if (!File.Exists(beforeSrc)) continue;
+                    string beforeDest = Path.Combine(beforeOutDir, $"{++nb:D3}_{Path.GetFileName(step.BeforeImagePath)}");
+                    File.Copy(beforeSrc, beforeDest, overwrite: true);
+                }
             }
 
             await RecordExport(project, ExportType.Images, outDir);
@@ -235,8 +252,8 @@ public class ExportService
     /// </summary>
     private static (string path, bool isTemp) ResolveAnnotatedImagePath(ProjectInfo project, ProjectStep step)
     {
-        if (step.ImagePath == null) return ("", false);
-        string srcPath = Path.Combine(project.ProjectFolder, step.ImagePath.Replace('/', '\\'));
+        if (step.AfterImagePath == null) return (string.Empty, false);
+        string srcPath = Path.Combine(project.ProjectFolder, step.AfterImagePath.Replace('/', '\\'));
 
         if (step.Annotations == null || step.Annotations.Count == 0)
             return (srcPath, false);
@@ -262,21 +279,27 @@ public class ExportService
 
         foreach (var ps in ActiveSteps(project))
         {
-            string? imagePath = ps.ImagePath != null
-                ? Path.Combine(project.ProjectFolder, ps.ImagePath.Replace('/', '\\'))
+            // after 画像（アノテーション焼き込み対象）
+            string? afterImagePath = ps.AfterImagePath != null
+                ? Path.Combine(project.ProjectFolder, ps.AfterImagePath.Replace('/', '\\'))
                 : null;
 
-            if (imagePath != null && ps.Annotations?.Count > 0)
+            if (afterImagePath != null && ps.Annotations?.Count > 0)
             {
-                using var bmp = AnnotationRenderer.Render(imagePath, ps.Annotations);
+                using var bmp = AnnotationRenderer.Render(afterImagePath, ps.Annotations);
                 if (bmp != null)
                 {
                     string tmp = Path.Combine(Path.GetTempPath(), $"ascann_{Guid.NewGuid():N}.png");
                     bmp.Save(tmp, System.Drawing.Imaging.ImageFormat.Png);
                     temps.Add(tmp);
-                    imagePath = tmp;
+                    afterImagePath = tmp;
                 }
             }
+
+            // before 画像（証跡・アノテーション付与しない）
+            string? beforeImagePath = ps.BeforeImagePath != null
+                ? Path.Combine(project.ProjectFolder, ps.BeforeImagePath.Replace('/', '\\'))
+                : null;
 
             session.Steps.Add(new ManualStep
             {
@@ -290,7 +313,8 @@ public class ExportService
                 ProcessName          = ps.ProcessName,
                 InputText            = ps.InputText,
                 KeyCodes             = ps.KeyCodes,
-                ImagePath            = imagePath,
+                AfterImagePath       = afterImagePath,
+                BeforeImagePath      = beforeImagePath,
                 DescriptionRuleBased = ps.DescriptionRuleBased,
                 DescriptionLlm       = ps.DescriptionOverride ?? ps.DescriptionLlm,
                 NeedsReview          = ps.NeedsReview,

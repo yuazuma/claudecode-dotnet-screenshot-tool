@@ -128,6 +128,17 @@
                             <TextBlock Text="{Binding ElementName=SldrCooldownDiff, Path=Value, StringFormat='{}{0:0.0}秒'}"
                                        VerticalAlignment="Center" Margin="5,0"/>
                         </StackPanel>
+
+                        <TextBlock Text="操作前後スクリーンショット" FontWeight="Bold" Margin="0,10,0,3"/>
+                        <CheckBox x:Name="ChkCaptureBeforeImage"
+                                  Content="操作前スクリーンショットを取得する（PNG 固定・証跡）"
+                                  Margin="10,2"/>
+                        <StackPanel Orientation="Horizontal" Margin="10,5">
+                            <TextBlock Text="操作後の撮影遅延:" VerticalAlignment="Center" Width="130"/>
+                            <TextBox x:Name="TxtPostClickDelayMs" Width="50"/>
+                            <TextBlock Text="ms　（50〜2000。アプリ画面更新を待つ時間）"
+                                       VerticalAlignment="Center" Margin="5,0"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

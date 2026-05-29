@@ -209,6 +209,8 @@ public partial class ProjectViewWindow : Window
     private void LoadAnnotationImage()
     {
         ImgAnnotation.Source = null;
+        ImgBefore.Source = null;
+        PnlBeforeImage.Visibility = System.Windows.Visibility.Collapsed;
         AnnCanvas.Children.Clear();
         _pendingAnnotations.Clear();
         _annImageSource = null;
@@ -216,9 +218,34 @@ public partial class ProjectViewWindow : Window
 
         if (_selectedStepIndex < 0 || _selectedStepIndex >= _stepVms.Count || _selectedProject == null) return;
         var step = _stepVms[_selectedStepIndex].Step;
-        if (step.ImagePath == null) return;
 
-        string path = Path.Combine(_selectedProject.ProjectFolder, step.ImagePath.Replace('/', '\\'));
+        // before 画像（証跡・読み取り専用）
+        if (step.BeforeImagePath != null)
+        {
+            string beforePath = Path.Combine(_selectedProject.ProjectFolder, step.BeforeImagePath.Replace('/', '\\'));
+            if (File.Exists(beforePath))
+            {
+                try
+                {
+                    var bImg = new System.Windows.Media.Imaging.BitmapImage();
+                    bImg.BeginInit();
+                    bImg.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bImg.UriSource = new Uri(beforePath, UriKind.Absolute);
+                    bImg.EndInit();
+                    bImg.Freeze();
+                    ImgBefore.Source = bImg;
+                    PnlBeforeImage.Visibility = System.Windows.Visibility.Visible;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "before 画像読み込み失敗: {Path}", beforePath);
+                }
+            }
+        }
+
+        if (step.AfterImagePath == null) return;
+
+        string path = Path.Combine(_selectedProject.ProjectFolder, step.AfterImagePath.Replace('/', '\\'));
         if (!File.Exists(path)) return;
 
         try
@@ -576,16 +603,28 @@ public partial class ProjectViewWindow : Window
 
         step.IsDeleted = true;
 
-        // 画像を _deleted/ へ移動
-        if (step.ImagePath != null)
+        // after 画像を _deleted/ へ移動
+        if (step.AfterImagePath != null)
         {
-            MoveToDeleted(_selectedProject.ProjectFolder, step.ImagePath, "images/_deleted");
-            step.ImagePath = step.ImagePath.Replace("images/", "images/_deleted/");
+            MoveToDeleted(_selectedProject.ProjectFolder, step.AfterImagePath, "images/_deleted");
+            step.AfterImagePath = step.AfterImagePath.Replace("images/", "images/_deleted/");
         }
-        if (step.ThumbPath != null)
+        if (step.AfterThumbPath != null)
         {
-            MoveToDeleted(_selectedProject.ProjectFolder, step.ThumbPath, "thumbs/_deleted");
-            step.ThumbPath = step.ThumbPath.Replace("thumbs/", "thumbs/_deleted/");
+            MoveToDeleted(_selectedProject.ProjectFolder, step.AfterThumbPath, "thumbs/_deleted");
+            step.AfterThumbPath = step.AfterThumbPath.Replace("thumbs/", "thumbs/_deleted/");
+        }
+
+        // before 画像を _deleted/ へ移動
+        if (step.BeforeImagePath != null)
+        {
+            MoveToDeleted(_selectedProject.ProjectFolder, step.BeforeImagePath, "images/before/_deleted");
+            step.BeforeImagePath = step.BeforeImagePath.Replace("images/before/", "images/before/_deleted/");
+        }
+        if (step.BeforeThumbPath != null)
+        {
+            MoveToDeleted(_selectedProject.ProjectFolder, step.BeforeThumbPath, "thumbs/before/_deleted");
+            step.BeforeThumbPath = step.BeforeThumbPath.Replace("thumbs/before/", "thumbs/before/_deleted/");
         }
 
         await SaveProjectAsync();
@@ -774,7 +813,7 @@ public partial class ProjectViewWindow : Window
             WindowTitle = "",
             ProcessName = "",
             DescriptionRuleBased = dlg.InputText.Trim(),
-            ImagePath = imagePath,
+            AfterImagePath = imagePath,
         };
 
         // モデルリスト内の挿入位置を StepNumber で決定する
@@ -934,10 +973,10 @@ internal class StepViewModel
         get
         {
             if (_thumbImage != null) return _thumbImage;
-            if (Step.ThumbPath == null) return null;
+            if (Step.AfterThumbPath == null) return null;
             try
             {
-                string path = Path.Combine(_projectFolder, Step.ThumbPath.Replace('/', '\\'));
+                string path = Path.Combine(_projectFolder, Step.AfterThumbPath.Replace('/', '\\'));
                 if (!File.Exists(path)) return null;
                 var img = new BitmapImage();
                 img.BeginInit();

@@ -76,10 +76,22 @@ public class MarkdownManualWriter
                 string reviewMark = step.NeedsReview ? " <!-- TODO: UI名を確認してください -->" : "";
                 sb.AppendLine($"{globalStep}. {desc}{reviewMark}");
 
-                if (!string.IsNullOrEmpty(step.ImagePath) && File.Exists(step.ImagePath))
+                bool hasBefore = !string.IsNullOrEmpty(step.BeforeImagePath) && File.Exists(step.BeforeImagePath);
+                bool hasAfter  = !string.IsNullOrEmpty(step.AfterImagePath)  && File.Exists(step.AfterImagePath);
+
+                if (hasBefore)
                 {
-                    string rel = Path.GetRelativePath(outputDir, step.ImagePath)
-                                     .Replace('\\', '/');
+                    string rel = Path.GetRelativePath(outputDir, step.BeforeImagePath!).Replace('\\', '/');
+                    sb.AppendLine();
+                    sb.AppendLine($"   **操作前**");
+                    sb.AppendLine();
+                    sb.AppendLine($"   ![操作前 {globalStep}]({rel})");
+                }
+                if (hasAfter)
+                {
+                    string rel = Path.GetRelativePath(outputDir, step.AfterImagePath!).Replace('\\', '/');
+                    sb.AppendLine();
+                    if (hasBefore) sb.AppendLine($"   **操作後**");
                     sb.AppendLine();
                     sb.AppendLine($"   ![ステップ {globalStep}]({rel})");
                 }

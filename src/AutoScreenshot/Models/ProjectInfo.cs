@@ -39,11 +39,36 @@ public class ProjectStep
     public string? InputText { get; set; }
     public string? KeyCodes { get; set; }
 
-    /// <summary>images/ 配下への相対パス</summary>
-    public string? ImagePath { get; set; }
+    /// <summary>images/ 配下への相対パス（操作後・設定フォーマット）。アノテーション対象。</summary>
+    public string? AfterImagePath { get; set; }
 
-    /// <summary>thumbs/ 配下への相対パス</summary>
-    public string? ThumbPath { get; set; }
+    /// <summary>thumbs/ 配下への相対パス（操作後画像のサムネイル）。</summary>
+    public string? AfterThumbPath { get; set; }
+
+    /// <summary>images/before/ 配下への相対パス（操作前・PNG 固定・証跡）。</summary>
+    public string? BeforeImagePath { get; set; }
+
+    /// <summary>thumbs/before/ 配下への相対パス（操作前画像のサムネイル）。</summary>
+    public string? BeforeThumbPath { get; set; }
+
+    // ---- v1.5.x 後方互換シム ------------------------------------------------
+    // 旧 project.json の "imagePath" / "thumbPath" を読み込み時に新フィールドへ移行する。
+    // get => null により WhenWritingNull で書き込み時はスキップされる。
+
+    [System.Text.Json.Serialization.JsonPropertyName("imagePath")]
+    public string? LegacyImagePath
+    {
+        get => null;
+        init => AfterImagePath ??= value;
+    }
+
+    [System.Text.Json.Serialization.JsonPropertyName("thumbPath")]
+    public string? LegacyThumbPath
+    {
+        get => null;
+        init => AfterThumbPath ??= value;
+    }
+    // -------------------------------------------------------------------------
 
     public string DescriptionRuleBased { get; set; } = "";
     public string? DescriptionLlm { get; set; }
