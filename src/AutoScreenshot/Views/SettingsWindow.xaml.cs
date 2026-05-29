@@ -97,7 +97,7 @@ public partial class SettingsWindow : Window
 
         // LLM連携 (NF-04: DPAPI 復号して表示)
         ChkLlmEnabled.IsChecked       = cfg.ManualGen.LlmEnabled;
-        PwdLlmEndpoint.Password       = DpapiHelper.Unprotect(cfg.ManualGen.LlmEndpoint);
+        TxtLlmEndpoint.Text           = DpapiHelper.Unprotect(cfg.ManualGen.LlmEndpoint);
         PwdLlmApiKey.Password         = DpapiHelper.Unprotect(cfg.ManualGen.LlmApiKey);
         TxtLlmDeploymentName.Text     = cfg.ManualGen.LlmDeploymentName;
 
@@ -216,7 +216,7 @@ public partial class SettingsWindow : Window
 
             // LLM連携 (NF-04: DPAPI 暗号化して保存)
             cfg.ManualGen.LlmEnabled        = ChkLlmEnabled.IsChecked == true;
-            cfg.ManualGen.LlmEndpoint       = DpapiHelper.Protect(PwdLlmEndpoint.Password);
+            cfg.ManualGen.LlmEndpoint       = DpapiHelper.Protect(TxtLlmEndpoint.Text.Trim());
             cfg.ManualGen.LlmApiKey         = DpapiHelper.Protect(PwdLlmApiKey.Password);
             cfg.ManualGen.LlmDeploymentName = TxtLlmDeploymentName.Text.Trim();
 

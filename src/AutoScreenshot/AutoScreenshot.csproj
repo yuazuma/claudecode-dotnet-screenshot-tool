@@ -12,9 +12,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>AutoScreenshot</AssemblyName>
     <RootNamespace>AutoScreenshot</RootNamespace>
-    <Version>1.6.0</Version>
-    <AssemblyVersion>1.6.0.0</AssemblyVersion>
-    <FileVersion>1.6.0.0</FileVersion>
+    <Version>1.6.1</Version>
+    <AssemblyVersion>1.6.1.0</AssemblyVersion>
+    <FileVersion>1.6.1.0</FileVersion>
     <Product>AutoScreenshot</Product>
     <Company>AutoScreenshot</Company>
     <Description>業務作業証跡の自動スクリーンショット撮影ツール</Description>
