@@ -10,11 +10,26 @@
 
 ### Fixed（修正）
 
+- **LLM 呼び出し形式を Anthropic Messages API に変更**
+  - `Azure.AI.Inference` SDK（v1.0.0-beta.5）が送信する `api-version=2024-05-01-preview`
+    をエンドポイントが拒否し LLM 連携が全件失敗していた問題を修正
+  - `Azure.AI.Inference.ChatCompletionsClient` から `HttpClient` による直接呼び出しに変更
+  - エンドポイント: `{設定の base URL}/anthropic/v1/messages`
+  - 認証: `Authorization: Bearer {key}` ヘッダー
+  - バージョン: `anthropic-version: 2023-06-01` ヘッダー
+  - リクエスト形式: Anthropic Messages API（`system` はトップレベル、`Content-Length` 必須）
+  - DPAPI 暗号化・エンドポイント・API キーの保存形式は変更なし（NF-04 維持）
+
 - **設定ウィンドウ: エンドポイント URL 入力欄をマスク解除**
   - 「Microsoft Azure AI Foundry エンドポイント URL」の入力欄を `PasswordBox`（マスク表示）から
     `TextBox`（平文表示）に変更
   - URL は視認・コピーが容易になった
   - config.json への保存は引き続き DPAPI で暗号化（NF-04 変更なし）
+
+- **before 画像フォールバック**
+  - `BeforeImagePath` が未取得のステップで、エクスポート時に before 欄が空白になっていた問題を修正
+  - before が未取得の場合、素の after 画像（アノテーション焼き込み前）を before として使用する
+  - 適用箇所: Markdown / Word / HTML エクスポート、画像エクスポート、ProjectViewWindow 表示
 
 ### Changed（変更）
 

@@ -59,8 +59,9 @@ public class ExportService
                 if (isTemp) try { File.Delete(srcPath); } catch { }
             }
 
-            // before 画像を before/ サブフォルダにコピー（アノテーションなし・PNG 元画像）
-            bool anyBefore = steps.Any(s => s.BeforeImagePath != null);
+            // before 画像を before/ サブフォルダにコピー
+            // before が未取得のステップは素の after 画像（アノテーション適用前）をフォールバックとして使用する
+            bool anyBefore = steps.Any(s => s.BeforeImagePath != null || s.AfterImagePath != null);
             if (anyBefore)
             {
                 string beforeOutDir = Path.Combine(outDir, "before");
@@ -68,10 +69,12 @@ public class ExportService
                 int nb = 0;
                 foreach (var step in steps)
                 {
-                    if (step.BeforeImagePath == null) continue;
-                    string beforeSrc = Path.Combine(project.ProjectFolder, step.BeforeImagePath.Replace('/', '\\'));
+                    // before が未取得の場合は素の after 画像をフォールバックとして使用
+                    string? beforeRelPath = step.BeforeImagePath ?? step.AfterImagePath;
+                    if (beforeRelPath == null) continue;
+                    string beforeSrc = Path.Combine(project.ProjectFolder, beforeRelPath.Replace('/', '\\'));
                     if (!File.Exists(beforeSrc)) continue;
-                    string beforeDest = Path.Combine(beforeOutDir, $"{++nb:D3}_{Path.GetFileName(step.BeforeImagePath)}");
+                    string beforeDest = Path.Combine(beforeOutDir, $"{++nb:D3}_{Path.GetFileName(beforeRelPath)}");
                     File.Copy(beforeSrc, beforeDest, overwrite: true);
                 }
             }
@@ -280,10 +283,11 @@ public class ExportService
         foreach (var ps in ActiveSteps(project))
         {
             // after 画像（アノテーション焼き込み対象）
-            string? afterImagePath = ps.AfterImagePath != null
+            string? rawAfterPath = ps.AfterImagePath != null
                 ? Path.Combine(project.ProjectFolder, ps.AfterImagePath.Replace('/', '\\'))
                 : null;
 
+            string? afterImagePath = rawAfterPath;
             if (afterImagePath != null && ps.Annotations?.Count > 0)
             {
                 using var bmp = AnnotationRenderer.Render(afterImagePath, ps.Annotations);
@@ -297,9 +301,12 @@ public class ExportService
             }
 
             // before 画像（証跡・アノテーション付与しない）
-            string? beforeImagePath = ps.BeforeImagePath != null
-                ? Path.Combine(project.ProjectFolder, ps.BeforeImagePath.Replace('/', '\\'))
-                : null;
+            // before が未取得の場合は素の after 画像（アノテーション適用前）をフォールバックとして使用する
+            string? beforeImagePath;
+            if (ps.BeforeImagePath != null)
+                beforeImagePath = Path.Combine(project.ProjectFolder, ps.BeforeImagePath.Replace('/', '\\'));
+            else
+                beforeImagePath = rawAfterPath;  // フォールバック
 
             session.Steps.Add(new ManualStep
             {

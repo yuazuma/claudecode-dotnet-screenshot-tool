@@ -1,18 +1,31 @@
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AutoScreenshot.Models;
-using Azure;
-using Azure.AI.Inference;
 using Serilog;
 
 namespace AutoScreenshot.Services;
 
-/// <summary>Azure AI Foundry 経由で Claude モデルを呼び出す LLM サービス (L-03, L-04, L-08)</summary>
+/// <summary>
+/// Azure AI Foundry 経由で Claude モデルを呼び出す LLM サービス (L-03, L-04, L-08)。
+/// エンドポイントが Anthropic Messages API 形式（/anthropic/v1/messages）を使用するため
+/// HttpClient で直接呼び出す。認証・エンドポイントは Azure AI Foundry の DPAPI 暗号化設定値を使用する。
+/// </summary>
 public class LlmService
 {
     private readonly string _endpoint;
     private readonly string _apiKey;
     private readonly string _deploymentName;
+
+    private static readonly HttpClient s_http = new();
+    private static readonly JsonSerializerOptions s_jsonOpts = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy   = JsonNamingPolicy.SnakeCaseLower,
+    };
 
     public LlmService(string endpoint, string apiKey, string deploymentName)
     {
@@ -76,20 +89,10 @@ public class LlmService
 
         try
         {
-            var client  = new ChatCompletionsClient(new Uri(_endpoint), new AzureKeyCredential(_apiKey));
-            var options = new ChatCompletionsOptions
-            {
-                Model    = _deploymentName,
-                Messages =
-                {
-                    new ChatRequestSystemMessage(system),
-                    new ChatRequestUserMessage($"以下の操作ステップの説明文を改善してください:\n\n{context}"),
-                },
-                MaxTokens = 256,
-            };
-            Response<ChatCompletions> response = await client.CompleteAsync(options, ct);
-            string? result = response.Value.Content?.Trim();
-            return string.IsNullOrEmpty(result) ? null : result;
+            return await CallLlmAsync(system,
+                $"以下の操作ステップの説明文を改善してください:\n\n{context}",
+                maxTokens: 256,
+                ct: ct);
         }
         catch (Exception ex)
         {
@@ -130,29 +133,83 @@ public class LlmService
 
     // ── 内部呼び出し ───────────────────────────────────────────────────────────
 
-    private async Task<string?> CallLlmAsync(string systemPrompt, string userPrompt)
+    private async Task<string?> CallLlmAsync(
+        string systemPrompt, string userPrompt,
+        int maxTokens = 4096, CancellationToken ct = default)
     {
         try
         {
-            var client  = new ChatCompletionsClient(new Uri(_endpoint), new AzureKeyCredential(_apiKey));
-            var options = new ChatCompletionsOptions
+            string url = BuildMessagesUrl();
+            var reqBody = new AnthropicRequest
             {
-                Model    = _deploymentName,
-                Messages =
-                {
-                    new ChatRequestSystemMessage(systemPrompt),
-                    new ChatRequestUserMessage(userPrompt),
-                },
-                MaxTokens = 4096,
+                Model     = _deploymentName,
+                MaxTokens = maxTokens,
+                System    = systemPrompt,
+                Messages  = [new AnthropicMessage { Role = "user", Content = userPrompt }],
             };
 
-            Response<ChatCompletions> response = await client.CompleteAsync(options);
-            return response.Value.Content;
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+            req.Headers.Add("anthropic-version", "2023-06-01");
+
+            // ByteArrayContent を使うことで Content-Length ヘッダーが自動的に付与される
+            byte[] bodyBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(reqBody, s_jsonOpts));
+            req.Content = new ByteArrayContent(bodyBytes);
+            req.Content.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+            using var resp = await s_http.SendAsync(req, ct);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                string err = await resp.Content.ReadAsStringAsync(ct);
+                Log.Warning("LLM 呼び出し失敗: {Status} {Body}", resp.StatusCode, err);
+                return null;
+            }
+
+            var result = await resp.Content.ReadFromJsonAsync<AnthropicResponse>(s_jsonOpts, ct);
+            return result?.Content?.FirstOrDefault(c => c.Type == "text")?.Text?.Trim();
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "LLM 呼び出し失敗: {Endpoint}", _endpoint);
             return null;
         }
+    }
+
+    // エンドポイント URL から host を取り出し、Anthropic Messages API パスを組み立てる。
+    // 設定例: "https://proj-xxx.services.ai.azure.com/models"
+    // → "https://proj-xxx.services.ai.azure.com/anthropic/v1/messages"
+    private string BuildMessagesUrl()
+    {
+        var uri = new Uri(_endpoint);
+        return $"{uri.Scheme}://{uri.Host}/anthropic/v1/messages";
+    }
+
+    // ── Anthropic Messages API リクエスト / レスポンスモデル ──────────────────
+
+    private sealed class AnthropicRequest
+    {
+        public string Model { get; set; } = "";
+        public int MaxTokens { get; set; }
+        public string? System { get; set; }
+        public List<AnthropicMessage> Messages { get; set; } = [];
+    }
+
+    private sealed class AnthropicMessage
+    {
+        public string Role    { get; set; } = "";
+        public string Content { get; set; } = "";
+    }
+
+    private sealed class AnthropicResponse
+    {
+        public List<AnthropicContent>? Content { get; set; }
+    }
+
+    private sealed class AnthropicContent
+    {
+        public string? Type { get; set; }
+        public string? Text { get; set; }
     }
 }

@@ -97,13 +97,18 @@ public class HtmlManualWriter
 
     private static string BuildBeforeImageTag(string projectFolder, ProjectStep step)
     {
-        if (step.BeforeImagePath == null) return string.Empty;
-        string fullPath = Path.Combine(projectFolder, step.BeforeImagePath.Replace('/', '\\'));
+        // before が未取得の場合は素の after 画像（アノテーション適用前）をフォールバックとして使用する
+        string? relPath = step.BeforeImagePath ?? step.AfterImagePath;
+        if (relPath == null) return string.Empty;
+
+        string fullPath = Path.Combine(projectFolder, relPath.Replace('/', '\\'));
         if (!File.Exists(fullPath)) return string.Empty;
         try
         {
             string base64 = Convert.ToBase64String(File.ReadAllBytes(fullPath));
-            return $"<img src=\"data:image/png;base64,{base64}\" alt=\"操作前\" loading=\"lazy\">";
+            string mime = relPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                ? "image/png" : GetMime(fullPath);
+            return $"<img src=\"data:{mime};base64,{base64}\" alt=\"操作前\" loading=\"lazy\">";
         }
         catch (Exception ex)
         {

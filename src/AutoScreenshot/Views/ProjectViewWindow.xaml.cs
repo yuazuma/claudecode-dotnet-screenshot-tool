@@ -220,9 +220,11 @@ public partial class ProjectViewWindow : Window
         var step = _stepVms[_selectedStepIndex].Step;
 
         // before 画像（証跡・読み取り専用）
-        if (step.BeforeImagePath != null)
+        // before が未取得の場合は素の after 画像（アノテーション適用前）をフォールバックとして表示する
+        string? beforeRelPath = step.BeforeImagePath ?? step.AfterImagePath;
+        if (beforeRelPath != null)
         {
-            string beforePath = Path.Combine(_selectedProject.ProjectFolder, step.BeforeImagePath.Replace('/', '\\'));
+            string beforePath = Path.Combine(_selectedProject.ProjectFolder, beforeRelPath.Replace('/', '\\'));
             if (File.Exists(beforePath))
             {
                 try
