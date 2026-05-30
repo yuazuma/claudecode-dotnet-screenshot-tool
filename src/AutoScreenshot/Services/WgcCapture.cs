@@ -27,6 +27,19 @@ internal static class WgcCapture
         IntPtr CreateForMonitor([In] IntPtr monitor, [In] ref Guid iid);
     }
 
+    /// <summary>
+    /// Windows 11 (Build 22000+) で追加された IsBorderRequired プロパティを持つ
+    /// GraphicsCaptureSession の COM インターフェイス。
+    /// TFM 17763 では型定義に存在しないため COM インターフェイス経由で直接設定する。
+    /// </summary>
+    [ComImport, Guid("BFEE7A93-F3BD-4A41-A011-2F5A28E62735")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+    private interface IGraphicsCaptureSession3
+    {
+        [return: MarshalAs(UnmanagedType.Bool)] bool get_IsBorderRequired();
+        void put_IsBorderRequired([MarshalAs(UnmanagedType.Bool)] bool value);
+    }
+
     // ── P/Invoke ────────────────────────────────────────────────────────────────
 
     [DllImport("combase.dll", PreserveSig = true)]
@@ -125,6 +138,7 @@ internal static class WgcCapture
         var tcs = new TaskCompletionSource<Direct3D11CaptureFrame?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         using var session = pool.CreateCaptureSession(item);
+        TrySuppressBorder(session);  // Windows 11+ の黄色いキャプチャ通知ボーダーを非表示
         pool.FrameArrived += (s, _) => tcs.TrySetResult(s.TryGetNextFrame());
         session.StartCapture();
 
@@ -142,6 +156,49 @@ internal static class WgcCapture
             using (soft)
                 return await SoftBitmapToGdiAsync(soft).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Windows 11 (Build 22000+) で表示されるキャプチャ通知の黄色ボーダーを抑制する。
+    /// IGraphicsCaptureSession3 を COM QI で取得して put_IsBorderRequired(false) を呼ぶ。
+    /// TFM 17763 では型定義が存在しないため COM 直接呼び出し。非対応 OS では何もしない。
+    /// </summary>
+    private static void TrySuppressBorder(GraphicsCaptureSession session)
+    {
+        try
+        {
+            // (object) 経由でコンパイル時型チェックを回避し実行時 QI（Windows 11+ 対応時のみ成功）
+            if ((object)session is IGraphicsCaptureSession3 s3)
+            {
+                s3.put_IsBorderRequired(false);
+                Log.Debug("WGC: IsBorderRequired=false に設定");
+                return;
+            }
+        }
+        catch { /* QI 失敗: 非対応 OS は無視 */ }
+
+        // フォールバック: IWinRTObject 経由で native ポインターを取得して vtable 直接呼び出し
+        try
+        {
+            if (session is not WinRT.IWinRTObject winRtObj) return;
+            var nativePtr = winRtObj.NativeObject.ThisPtr;
+            var iid3 = new Guid("BFEE7A93-F3BD-4A41-A011-2F5A28E62735");
+            if (Marshal.QueryInterface(nativePtr, ref iid3, out var pSession3) < 0 || pSession3 == IntPtr.Zero)
+                return;
+            try
+            {
+                unsafe
+                {
+                    // WinRT vtable: [0-2]=IUnknown, [3-5]=IInspectable, [6]=get, [7]=put
+                    var vtblPtr = *(IntPtr*)(void*)pSession3;
+                    var vtbl    = (void**)(void*)vtblPtr;
+                    ((delegate* unmanaged[Stdcall]<IntPtr, bool, int>)vtbl[7])(pSession3, false);
+                }
+                Log.Debug("WGC: IsBorderRequired=false (vtable経由) に設定");
+            }
+            finally { Marshal.Release(pSession3); }
+        }
+        catch { /* 非対応 OS では無視 */ }
     }
 
     private static GraphicsCaptureItem CreateCaptureItemForMonitor(IntPtr hMon)
