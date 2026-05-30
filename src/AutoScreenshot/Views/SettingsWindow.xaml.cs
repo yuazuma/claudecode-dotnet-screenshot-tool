@@ -55,15 +55,28 @@ public partial class SettingsWindow : Window
         ChkCaptureBeforeImage.IsChecked = cfg.Triggers.CaptureBeforeImage;
         TxtPostClickDelayMs.Text        = cfg.Triggers.PostClickDelayMs.ToString();
 
+        // パス設定（FR-H3/H4）
+        TxtImageBaseFolder.Text       = cfg.Storage.ImageBaseFolder;
+        TxtProjectFolderTemplate.Text = cfg.Storage.ProjectFolderTemplate;
+        TxtImageFolderTemplate.Text   = cfg.Storage.ImageFolderTemplate;
+        TxtImageFallbackFolder.Text   = cfg.Storage.ImageFallbackBaseFolder;
+        TxtManualBaseFolder.Text      = cfg.ManualGen.ManualBaseFolder;
+        TxtManualFolderTemplate.Text  = cfg.ManualGen.ManualFolderTemplate;
+        TxtManualFallbackFolder.Text  = cfg.ManualGen.ManualFallbackBaseFolder;
+        ChkOpenFolderOnExportPath.IsChecked   = cfg.Project.OpenFolderOnExportComplete;
+        TxtVideoBaseFolder.Text       = cfg.VideoGen.VideoBaseFolder;
+        TxtVideoFolderTemplate.Text   = cfg.VideoGen.VideoFolderTemplate;
+        TxtVideoFallbackFolder.Text   = cfg.VideoGen.VideoFallbackBaseFolder;
+        ChkOpenFolderOnCompletePath.IsChecked = cfg.VideoGen.OpenFolderOnComplete;
+
         // 保存
-        TxtSaveFolder.Text = cfg.Storage.SaveFolder;
         RdoPng.IsChecked   = cfg.Storage.ImageFormat == ImageFormat.Png;
         RdoJpeg.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.Jpeg;
         RdoWebP.IsChecked  = cfg.Storage.ImageFormat == ImageFormat.WebP;
         SldrJpegQuality.Value = cfg.Storage.JpegQuality;
         PnlJpegQuality.Visibility = cfg.Storage.ImageFormat != ImageFormat.Png
             ? Visibility.Visible : Visibility.Collapsed;
-        CmbNaming.SelectedIndex = (int)cfg.Storage.FolderNaming;
+        // FolderNaming は廃止済み（パス設定タブのテンプレートに移行）
 
         // メタデータ
         ChkSidecarLog.IsChecked    = cfg.Metadata.SidecarTextLog;
@@ -85,7 +98,7 @@ public partial class SettingsWindow : Window
 
         // 手順書生成
         ChkManualEnabled.IsChecked        = cfg.ManualGen.Enabled;
-        TxtManualOutputFolder.Text        = cfg.ManualGen.OutputFolder;
+        // OutputFolder は廃止済み（ManualBaseFolder に移行）
         CmbScreenshotMode.SelectedIndex   = (int)cfg.ManualGen.ScreenshotMode;
         CmbKeyboardMode.SelectedIndex     = (int)cfg.ManualGen.KeyboardMode;
         SldrChapterTimeGap.Value          = cfg.ManualGen.ChapterTimeGapMinutes;
@@ -105,7 +118,7 @@ public partial class SettingsWindow : Window
         var vc = cfg.VideoGen;
         ChkVideoApng.IsChecked          = vc.OutputApng;
         ChkVideoMp4.IsChecked           = vc.OutputMp4;
-        TxtVideoFolder.Text             = vc.VideoOutputFolder;
+        // VideoOutputFolder は廃止済み（VideoBaseFolder に移行）
         RdoVideoSession.IsChecked       = vc.VideoUnit == VideoUnit.Session;
         RdoVideoChapter.IsChecked       = vc.VideoUnit == VideoUnit.Chapter;
         RdoFrameFixed.IsChecked         = vc.FrameTimingMode == FrameTimingMode.Fixed;
@@ -131,7 +144,6 @@ public partial class SettingsWindow : Window
         TxtTtsRate.Text                 = vc.TtsRate.ToString();
         TxtTtsVolume.Text               = vc.TtsVolume.ToString();
         ChkAutoGenerateVideo.IsChecked  = vc.AutoGenerateWithManual;
-        ChkOpenFolderOnComplete.IsChecked = vc.OpenFolderOnComplete;
         UpdateFrameTimingPanels();
 
         // プロジェクト
@@ -142,7 +154,6 @@ public partial class SettingsWindow : Window
         ChkAutoExportDocx.IsChecked       = pc.AutoExportDocx;
         ChkAutoExportVideo.IsChecked      = pc.AutoExportVideo;
         ChkIncrementalLlm.IsChecked       = pc.IncrementalLlm;
-        ChkOpenFolderOnExport.IsChecked   = pc.OpenFolderOnExportComplete;
     }
 
     private void ApplySettings()
@@ -180,12 +191,24 @@ public partial class SettingsWindow : Window
             cfg.Triggers.CooldownActiveWindow  = SldrCooldownWindow.Value;
             cfg.Triggers.CooldownScreenDiff    = SldrCooldownDiff.Value;
 
-            cfg.Storage.SaveFolder  = TxtSaveFolder.Text;
+            // パス設定（FR-H3/H4）
+            cfg.Storage.ImageBaseFolder          = TxtImageBaseFolder.Text.Trim();
+            cfg.Storage.ProjectFolderTemplate    = TxtProjectFolderTemplate.Text.Trim();
+            cfg.Storage.ImageFolderTemplate      = TxtImageFolderTemplate.Text.Trim();
+            cfg.Storage.ImageFallbackBaseFolder  = TxtImageFallbackFolder.Text.Trim();
+            cfg.ManualGen.ManualBaseFolder       = TxtManualBaseFolder.Text.Trim();
+            cfg.ManualGen.ManualFolderTemplate   = TxtManualFolderTemplate.Text.Trim();
+            cfg.ManualGen.ManualFallbackBaseFolder = TxtManualFallbackFolder.Text.Trim();
+            cfg.Project.OpenFolderOnExportComplete = ChkOpenFolderOnExportPath.IsChecked == true;
+            cfg.VideoGen.VideoBaseFolder         = TxtVideoBaseFolder.Text.Trim();
+            cfg.VideoGen.VideoFolderTemplate     = TxtVideoFolderTemplate.Text.Trim();
+            cfg.VideoGen.VideoFallbackBaseFolder = TxtVideoFallbackFolder.Text.Trim();
+            cfg.VideoGen.OpenFolderOnComplete    = ChkOpenFolderOnCompletePath.IsChecked == true;
+
             cfg.Storage.ImageFormat = RdoJpeg.IsChecked == true ? ImageFormat.Jpeg
                                     : RdoWebP.IsChecked == true ? ImageFormat.WebP
                                     : ImageFormat.Png;
-            cfg.Storage.JpegQuality  = (int)SldrJpegQuality.Value;
-            cfg.Storage.FolderNaming = (FolderNamingRule)CmbNaming.SelectedIndex;
+            cfg.Storage.JpegQuality = (int)SldrJpegQuality.Value;
 
             cfg.Metadata.SidecarTextLog    = ChkSidecarLog.IsChecked == true;
             cfg.Metadata.BurnTimestamp     = ChkBurnTimestamp.IsChecked == true;
@@ -204,7 +227,6 @@ public partial class SettingsWindow : Window
             cfg.Notification.ShowCounter = ChkCounter.IsChecked == true;
 
             cfg.ManualGen.Enabled               = ChkManualEnabled.IsChecked == true;
-            cfg.ManualGen.OutputFolder          = TxtManualOutputFolder.Text.Trim();
             cfg.ManualGen.ScreenshotMode        = (AutoScreenshot.Models.ScreenshotMode)CmbScreenshotMode.SelectedIndex;
             cfg.ManualGen.KeyboardMode          = (AutoScreenshot.Models.KeyboardMode)CmbKeyboardMode.SelectedIndex;
             cfg.ManualGen.ChapterTimeGapMinutes = (int)SldrChapterTimeGap.Value;
@@ -223,7 +245,6 @@ public partial class SettingsWindow : Window
             // 動画生成
             cfg.VideoGen.OutputApng          = ChkVideoApng.IsChecked == true;
             cfg.VideoGen.OutputMp4           = ChkVideoMp4.IsChecked == true;
-            cfg.VideoGen.VideoOutputFolder   = TxtVideoFolder.Text.Trim();
             cfg.VideoGen.VideoUnit           = RdoVideoChapter.IsChecked == true ? VideoUnit.Chapter : VideoUnit.Session;
             cfg.VideoGen.FrameTimingMode     = RdoFrameRealTime.IsChecked == true ? FrameTimingMode.RealTime : FrameTimingMode.Fixed;
             cfg.VideoGen.FixedFrameSeconds   = double.TryParse(TxtFixedFrameSec.Text, out double f) ? f : 3.0;
@@ -247,7 +268,6 @@ public partial class SettingsWindow : Window
             cfg.VideoGen.TtsRate             = int.TryParse(TxtTtsRate.Text,   out int tr) ? Math.Clamp(tr, -10, 10) : 0;
             cfg.VideoGen.TtsVolume           = int.TryParse(TxtTtsVolume.Text, out int tv) ? Math.Clamp(tv, 0, 100) : 100;
             cfg.VideoGen.AutoGenerateWithManual  = ChkAutoGenerateVideo.IsChecked == true;
-            cfg.VideoGen.OpenFolderOnComplete    = ChkOpenFolderOnComplete.IsChecked == true;
 
             // プロジェクト
             cfg.Project.ThumbnailMaxWidth         = (int)SldrThumbnailWidth.Value;
@@ -256,7 +276,6 @@ public partial class SettingsWindow : Window
             cfg.Project.AutoExportDocx            = ChkAutoExportDocx.IsChecked == true;
             cfg.Project.AutoExportVideo           = ChkAutoExportVideo.IsChecked == true;
             cfg.Project.IncrementalLlm            = ChkIncrementalLlm.IsChecked == true;
-            cfg.Project.OpenFolderOnExportComplete = ChkOpenFolderOnExport.IsChecked == true;
         });
         // ConfigChanged イベント → NotifyIconWrapper が HotkeyService.Register() を再呼び出し
 
@@ -340,26 +359,41 @@ public partial class SettingsWindow : Window
     private void BtnCancel_Click(object sender, RoutedEventArgs e) => Close();
 
     private void BtnBrowse_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtImageBaseFolder, "画像のベースフォルダを選択してください");
+
+    // ---- パス設定タブ Browse ボタン（FR-H4） ----
+
+    private void BtnBrowseImageBase_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtImageBaseFolder, "画像のベースフォルダを選択してください");
+
+    private void BtnBrowseImageFallback_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtImageFallbackFolder, "画像の第2ベースフォルダを選択してください");
+
+    private void BtnBrowseManualBase_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtManualBaseFolder, "手順書のベースフォルダを選択してください");
+
+    private void BtnBrowseManualFallback_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtManualFallbackFolder, "手順書の第2ベースフォルダを選択してください");
+
+    private void BtnBrowseVideoBase_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtVideoBaseFolder, "動画のベースフォルダを選択してください");
+
+    private void BtnBrowseVideoFallback_Click(object sender, RoutedEventArgs e)
+        => BrowseFolder(TxtVideoFallbackFolder, "動画の第2ベースフォルダを選択してください");
+
+    private static void BrowseFolder(System.Windows.Controls.TextBox target, string description)
     {
         using var dialog = new FolderBrowserDialog
         {
-            SelectedPath = TxtSaveFolder.Text,
-            Description = "保存先フォルダを選択してください"
+            SelectedPath = target.Text,
+            Description  = description,
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            TxtSaveFolder.Text = dialog.SelectedPath;
+            target.Text = dialog.SelectedPath;
     }
 
     private void BtnBrowseManualFolder_Click(object sender, RoutedEventArgs e)
-    {
-        using var dialog = new FolderBrowserDialog
-        {
-            SelectedPath = TxtManualOutputFolder.Text,
-            Description = "手順書の出力先フォルダを選択してください"
-        };
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            TxtManualOutputFolder.Text = dialog.SelectedPath;
-    }
+        => BrowseFolder(TxtManualBaseFolder, "手順書のベースフォルダを選択してください");
 
     private void BtnBrowseMarkdownTemplate_Click(object sender, RoutedEventArgs e)
     {
@@ -388,15 +422,7 @@ public partial class SettingsWindow : Window
     // --- 動画生成タブ ---
 
     private void BtnVideoFolderBrowse_Click(object sender, RoutedEventArgs e)
-    {
-        using var dialog = new FolderBrowserDialog
-        {
-            SelectedPath = TxtVideoFolder.Text,
-            Description  = "動画の出力先フォルダを選択してください"
-        };
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            TxtVideoFolder.Text = dialog.SelectedPath;
-    }
+        => BrowseFolder(TxtVideoBaseFolder, "動画のベースフォルダを選択してください");
 
     private void RdoFrameTiming_Changed(object sender, RoutedEventArgs e)
         => UpdateFrameTimingPanels();

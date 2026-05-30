@@ -65,7 +65,7 @@ public class TriggerConfig
     public double ScreenDiffThresholdPercent { get; set; } = 30.0;
 
     // 操作前後スクリーンショット
-    /// <summary>クリック前スクリーンショットを取得する（PNG 固定・証跡）。</summary>
+    /// <summary>クリック前スクリーンショットを取得する（after と同フォーマット・ロスレス・証跡）。</summary>
     public bool CaptureBeforeImage { get; set; } = true;
 
     /// <summary>クリック操作後の撮影遅延（ミリ秒）。アプリ画面更新を待つ。</summary>
@@ -74,12 +74,38 @@ public class TriggerConfig
 
 public class StorageConfig
 {
-    public string SaveFolder { get; set; } =
+    // ---- 保存先フォルダ（FR-H3） ----
+
+    /// <summary>画像のベースフォルダ。</summary>
+    public string ImageBaseFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "AutoScreenshot");
+
+    /// <summary>プロジェクト機能無効時の日付テンプレートフォルダ名。</summary>
+    public string ImageFolderTemplate { get; set; } = "yyyyMMdd";
+
+    /// <summary>プロジェクトフォルダ名テンプレート（.ascproj 拡張子を含める）。</summary>
+    public string ProjectFolderTemplate { get; set; } = "{date_time}_{title_short}.ascproj";
+
+    /// <summary>第2ベースフォルダ（空文字 = フォールバックなし）。</summary>
+    public string ImageFallbackBaseFolder { get; set; } = "";
+
+    // ---- 後方互換 JSON 移行シム ----
+
+    /// <summary>v1.6.x 以前の SaveFolder を ImageBaseFolder へ移行する。</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("saveFolder")]
+    public string? LegacySaveFolder
+    {
+        get => null;
+        init => ImageBaseFolder = value ?? ImageBaseFolder;
+    }
+
+    // ---- 画像フォーマット ----
 
     public ImageFormat ImageFormat { get; set; } = ImageFormat.Png;
     public int JpegQuality { get; set; } = 85;
 
+    // FolderNaming: 廃止（設定UIから削除済み）。旧 config.json 読み込み互換のため残置。
+    [System.Obsolete("v1.7.0 で廃止。ImageFolderTemplate を使用する。")]
     public FolderNamingRule FolderNaming { get; set; } = FolderNamingRule.DateWithTimestamp;
 
     // 空き容量しきい値 (MB)

@@ -53,6 +53,7 @@ public class NotifyIconWrapper : IDisposable
             _config, new UiaService(), new OcrService(), _notifier, _projectStore);
         _videoGenerator = new VideoGenerator(_config, _notifier);
         _manualRecorder.SetVideoGenerator(_videoGenerator);
+        _manualRecorder.SetFileStorage(_storage);
         _exportService = new ExportService(_config, _projectStore, _videoGenerator, _notifier);
         _orchestrator = new TriggerOrchestrator(
             _config, _hook, _capture, _storage, _diffDetector, _metadataLogger, _notifier, _masking,
@@ -95,6 +96,9 @@ public class NotifyIconWrapper : IDisposable
         if (_config.Config.AutoStart && !AutoStartService.IsEnabled())
             AutoStartService.Enable();
 
+        // FR-H5: 起動時ドライブチェック
+        CheckDrivesAndActivateFallback();
+
         Log.Information("タスクトレイアイコン表示完了");
     }
 
@@ -124,7 +128,7 @@ public class NotifyIconWrapper : IDisposable
         var openFolderItem = new ToolStripMenuItem("保存フォルダを開く");
         openFolderItem.Click += (_, _) =>
         {
-            string folder = _config.Config.Storage.SaveFolder;
+            string folder = _config.Config.Storage.ImageBaseFolder;
             Directory.CreateDirectory(folder);
             System.Diagnostics.Process.Start("explorer.exe", folder);
         };
@@ -287,6 +291,51 @@ public class NotifyIconWrapper : IDisposable
             _pauseItem.Text = _paused ? "再開" : "一時停止";
 
         _notifier.SetBaseState(_paused);
+    }
+
+    // ── FR-H5: 起動時ドライブチェック ────────────────────────────────────────
+
+    private void CheckDrivesAndActivateFallback()
+    {
+        try
+        {
+            var cfg = _config.Config;
+
+            if (!string.IsNullOrEmpty(cfg.Storage.ImageFallbackBaseFolder) && !_storage.IsUsingFallback)
+            {
+                if (!IsDriveAccessible(cfg.Storage.ImageBaseFolder))
+                {
+                    _storage.ActivateFallback(cfg.Storage.ImageFallbackBaseFolder);
+                    _notifier.ShowFallbackActivated("画像", cfg.Storage.ImageBaseFolder, cfg.Storage.ImageFallbackBaseFolder);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "起動時ドライブチェックで例外が発生しました（フォールバック判定をスキップ）");
+        }
+    }
+
+    private static bool IsDriveAccessible(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string? root = Path.GetPathRoot(path);
+            if (root == null) return false;
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady) return false;
+            string testDir = path;
+            Directory.CreateDirectory(testDir);
+            string testFile = Path.Combine(testDir, $".access_test_{Guid.NewGuid():N}");
+            File.WriteAllText(testFile, "");
+            File.Delete(testFile);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void Dispose()

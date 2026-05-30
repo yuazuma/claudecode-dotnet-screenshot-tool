@@ -7,9 +7,32 @@ public class VideoGenConfig
     public bool OutputApng { get; set; } = true;
     public bool OutputMp4  { get; set; } = true;
 
-    // --- 出力フォルダ ---
-    public string VideoOutputFolder { get; set; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "AutoScreenshot");
+    // --- 出力フォルダ（FR-H3） ---
+
+    /// <summary>動画のベースフォルダ。</summary>
+    public string VideoBaseFolder { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "AutoScreenshot");
+
+    /// <summary>日付テンプレートフォルダ名。</summary>
+    public string VideoFolderTemplate { get; set; } = "{date_time}";
+
+    /// <summary>第2ベースフォルダ（空文字 = フォールバックなし）。</summary>
+    public string VideoFallbackBaseFolder { get; set; } = "";
+
+    // ---- 後方互換 JSON 移行シム ----
+
+    /// <summary>v1.6.x 以前の VideoOutputFolder を VideoBaseFolder へ移行する。</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("videoOutputFolder")]
+    public string? LegacyVideoOutputFolder
+    {
+        get => null;
+        init
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                VideoBaseFolder = value;
+        }
+    }
+
 
     // --- 構成単位 ---
     public VideoUnit VideoUnit { get; set; } = VideoUnit.Session;

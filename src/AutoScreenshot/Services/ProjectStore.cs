@@ -24,14 +24,28 @@ public class ProjectStore
     }
 
     /// <summary>プロジェクトフォルダを作成し、初期 project.json を書き込む。</summary>
-    public async Task<ProjectInfo> CreateProjectAsync(string title)
+    public async Task<ProjectInfo> CreateProjectAsync(string title, DateTime? sessionStart = null)
     {
-        string saveFolder = _config.Config.Storage.SaveFolder;
-        Directory.CreateDirectory(saveFolder);
+        var cfg = _config.Config.Storage;
+        string baseFolder = cfg.ImageBaseFolder;
+        Directory.CreateDirectory(baseFolder);
 
-        string slug = MakeSlug(title);
-        string folderName = $"{DateTime.Now:yyyyMMdd_HHmmss}_{slug}.ascproj";
-        string projectFolder = Path.Combine(saveFolder, folderName);
+        // FR-H3: プロジェクトフォルダ名をテンプレートで評価
+        var start = sessionStart ?? DateTime.Now;
+        string resolved = FolderTemplateService.Evaluate(cfg.ProjectFolderTemplate, start, title, null);
+
+        // .ascproj が含まれていない場合は補完
+        if (string.IsNullOrEmpty(resolved))
+        {
+            string slug = MakeSlug(title);
+            resolved = $"{start:yyyyMMdd_HHmmss}_{slug}.ascproj";
+        }
+        else if (!resolved.EndsWith(".ascproj", StringComparison.OrdinalIgnoreCase))
+        {
+            resolved += ".ascproj";
+        }
+
+        string projectFolder = Path.Combine(baseFolder, resolved);
 
         Directory.CreateDirectory(projectFolder);
         Directory.CreateDirectory(Path.Combine(projectFolder, "images"));
@@ -98,7 +112,7 @@ public class ProjectStore
     /// <summary>SaveFolder 直下の .ascproj フォルダを作成日時降順で列挙する。</summary>
     public async Task<List<ProjectInfo>> ListProjectsAsync()
     {
-        string saveFolder = _config.Config.Storage.SaveFolder;
+        string saveFolder = _config.Config.Storage.ImageBaseFolder;
         if (!Directory.Exists(saveFolder)) return [];
 
         var folders = Directory.GetDirectories(saveFolder, "*.ascproj")

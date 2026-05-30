@@ -14,6 +14,7 @@ public class ManualSessionRecorder
     private readonly MarkdownManualWriter _mdWriter   = new();
     private readonly DocxManualWriter     _docxWriter = new();
     private VideoGenerator? _videoGenerator;
+    private FileStorage? _fileStorage;
 
     // プロジェクト機能
     private readonly ProjectStore? _projectStore;
@@ -24,6 +25,9 @@ public class ManualSessionRecorder
     private readonly SemaphoreSlim _llmSemaphore = new(1, 1);
     private readonly CancellationTokenSource _llmCts = new();
     private Task? _llmWorkerTask;
+
+    // 動画生成タスク（StopSessionAsync で完了を待機する）
+    private Task? _pendingVideoTask;
 
     private ManualSession? _current;
     private readonly object _lock = new();
@@ -37,6 +41,9 @@ public class ManualSessionRecorder
         _notifier     = notifier;
         _projectStore = projectStore;
     }
+
+    /// <summary>FileStorage を設定する（セッション情報の共有用）。</summary>
+    public void SetFileStorage(FileStorage storage) => _fileStorage = storage;
 
     /// <summary>現在記録中のプロジェクト情報を返す。セッション開始前は null。</summary>
     public ProjectInfo? CurrentProject { get { lock (_lock) { return _currentProject; } } }
@@ -56,6 +63,9 @@ public class ManualSessionRecorder
             _current = new ManualSession { Title = resolvedTitle };
             Log.Information("手順書セッション開始: {Title} ({Id})", _current.Title, _current.SessionId);
         }
+
+        // FR-H3: FileStorage にセッション情報を渡してテンプレート評価に使用する
+        _fileStorage?.SetSessionInfo(DateTime.Now, resolvedTitle);
 
         if (_projectStore != null)
         {
@@ -388,6 +398,29 @@ public class ManualSessionRecorder
             try { await _llmWorkerTask.ConfigureAwait(false); }
             catch { /* OperationCanceledException は無視 */ }
         }
+
+        // 動画生成タスクが発行されていれば最大 5 分待機する
+        // fire-and-forget にするとプロセス終了前に Log.CloseAndFlush() が走り
+        // エラーがログに残らず MP4 が 0 バイトになる問題への対策
+        if (_pendingVideoTask != null)
+        {
+            Log.Information("動画生成の完了を待機中（最大 5 分）...");
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                await _pendingVideoTask.WaitAsync(cts.Token).ConfigureAwait(false);
+                Log.Information("動画生成完了");
+            }
+            catch (OperationCanceledException)
+            {
+                Log.Warning("動画生成タイムアウト（5 分）: 処理を中断しました");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "動画生成エラー（StopSessionAsync 待機中）");
+            }
+            _pendingVideoTask = null;
+        }
     }
 
     private async Task WriteSessionAsync(ManualSession session, ProjectInfo? project)
@@ -461,14 +494,24 @@ public class ManualSessionRecorder
             }
         }
 
-        // 出力先フォルダ
+        // 出力先フォルダ（FR-H3: テンプレート評価）
         string folder;
         if (project != null)
+        {
             folder = Path.Combine(project.ProjectFolder, "exports");
+        }
         else
-            folder = string.IsNullOrWhiteSpace(cfg.OutputFolder)
-                ? Path.Combine(_config.Config.Storage.SaveFolder, "manuals")
-                : cfg.OutputFolder;
+        {
+            var manualCfg = _config.Config.ManualGen;
+            string baseFolder = !string.IsNullOrWhiteSpace(manualCfg.ManualBaseFolder)
+                ? manualCfg.ManualBaseFolder
+                : _config.Config.Storage.ImageBaseFolder;
+            string subFolder = FolderTemplateService.Evaluate(
+                manualCfg.ManualFolderTemplate, session.StartedAt, session.Title);
+            folder = string.IsNullOrEmpty(subFolder)
+                ? baseFolder
+                : Path.Combine(baseFolder, subFolder);
+        }
 
         string slug = MakeSlug(session.Title);
         string fileBase = $"{session.StartedAt:yyyyMMdd_HHmmss}_{slug}";
@@ -510,7 +553,7 @@ public class ManualSessionRecorder
 
             bool autoVideo = videoEnabled;
             if (autoVideo && _videoGenerator != null)
-                _ = _videoGenerator.GenerateAsync(session);
+                _pendingVideoTask = _videoGenerator.GenerateAsync(session);
         }
         catch (Exception ex)
         {

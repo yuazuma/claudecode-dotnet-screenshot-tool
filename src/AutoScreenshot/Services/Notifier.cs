@@ -133,6 +133,49 @@ public class Notifier
         });
     }
 
+    // ---- エクスポート進捗（FR-H6） ----
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, AutoScreenshot.Models.ExportProgress>
+        _activeExports = new();
+
+    /// <summary>アクティブなエクスポートの進捗を更新し、トレイツールヒントに反映する。</summary>
+    public void SetExportProgress(string key, AutoScreenshot.Models.ExportProgress? progress)
+    {
+        if (progress == null)
+            _activeExports.TryRemove(key, out _);
+        else
+            _activeExports[key] = progress;
+
+        UpdateTooltipWithExport();
+    }
+
+    private void UpdateTooltipWithExport()
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (_notifyIcon == null) return;
+            string baseText = _isPaused
+                ? "AutoScreenshot [一時停止中]"
+                : $"AutoScreenshot - 本日 {_todayCount} 枚撮影";
+
+            if (_activeExports.IsEmpty)
+            {
+                _notifyIcon.Text = baseText.Length > 127 ? baseText[..127] : baseText;
+                return;
+            }
+
+            var lines = new System.Text.StringBuilder(baseText);
+            foreach (var ep in _activeExports.Values)
+            {
+                string line = "\n" + ep.ToTooltipLine();
+                if (lines.Length + line.Length > 127) break;
+                lines.Append(line);
+            }
+            string result = lines.ToString();
+            _notifyIcon.Text = result.Length > 127 ? result[..127] : result;
+        });
+    }
+
     // ---- その他の通知 ----
 
     public void ShowDiskWarning(long freeMb)
@@ -142,6 +185,19 @@ public class Notifier
             _notifyIcon?.ShowBalloonTip(5000, "AutoScreenshot - ディスク容量警告",
                 $"空き容量が少なくなっています: {freeMb}MB", ToolTipIcon.Warning);
         });
+    }
+
+    /// <summary>FR-H5: フォールバックフォルダへの切り替えをユーザーに通知する。</summary>
+    public void ShowFallbackActivated(string outputType, string primaryFolder, string fallbackFolder)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            string drive = Path.GetPathRoot(primaryFolder) ?? primaryFolder;
+            _notifyIcon?.ShowBalloonTip(8000, $"AutoScreenshot - {outputType}保存先を切り替えました",
+                $"ドライブ（{drive}）に書き込めないため、\n第2フォルダ（{fallbackFolder}）に切り替えました。",
+                ToolTipIcon.Warning);
+        });
+        Log.Warning("FR-H5: {Type} フォールバック発動 {Primary} → {Fallback}", outputType, primaryFolder, fallbackFolder);
     }
 
     /// <summary>汎用バルーン通知。バックグラウンドスレッドから呼び出し可能。</summary>

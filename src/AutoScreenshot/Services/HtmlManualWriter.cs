@@ -10,7 +10,9 @@ namespace AutoScreenshot.Services;
 /// </summary>
 public class HtmlManualWriter
 {
-    public async Task WriteAsync(ProjectInfo project, string outputPath)
+    public async Task WriteAsync(ProjectInfo project, string outputPath,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
@@ -54,8 +56,13 @@ public class HtmlManualWriter
         sb.AppendLine("<main>");
 
         // ステップカード
+        int stepIdx = 0;
         foreach (var step in steps)
         {
+            ct.ThrowIfCancellationRequested();
+            stepIdx++;
+            progress?.Report(new AutoScreenshot.Models.ExportProgress(
+                "HTML 手順書を生成中...", stepIdx, steps.Count, outputPath));
             string desc = System.Net.WebUtility.HtmlEncode(step.EffectiveDescription);
             string trigger = System.Net.WebUtility.HtmlEncode(step.TriggerType);
             string window = System.Net.WebUtility.HtmlEncode(step.WindowTitle);

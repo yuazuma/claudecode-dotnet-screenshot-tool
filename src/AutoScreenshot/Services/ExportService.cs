@@ -34,11 +34,13 @@ public class ExportService
     // ---- 公開 API ----
 
     /// <summary>非削除ステップの画像を exports/images/ へコピーする（FR-PJ04）。</summary>
-    public async Task ExportImagesAsync(ProjectInfo project)
+    public async Task ExportImagesAsync(ProjectInfo project,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
-        await sem.WaitAsync();
+        await sem.WaitAsync(ct);
         try
         {
             var steps = ActiveSteps(project);
@@ -49,9 +51,13 @@ public class ExportService
             Directory.CreateDirectory(outDir);
 
             int n = 0;
+            int imgTotal = steps.Count(s => s.AfterImagePath != null);
             foreach (var step in steps)
             {
+                ct.ThrowIfCancellationRequested();
                 if (step.AfterImagePath == null) continue;
+                progress?.Report(new AutoScreenshot.Models.ExportProgress(
+                    "画像を書き出し中...", ++n - 1 < 0 ? 0 : n, imgTotal, outDir));
                 var (srcPath, isTemp) = ResolveAnnotatedImagePath(project, step);
                 if (!File.Exists(srcPath)) { if (isTemp) try { File.Delete(srcPath); } catch { } continue; }
                 string dest = Path.Combine(outDir, $"{++n:D3}_{Path.GetFileName(step.AfterImagePath)}");
@@ -96,7 +102,9 @@ public class ExportService
     }
 
     /// <summary>Markdown 手順書を exports/ へ生成する（FR-PJ05）。</summary>
-    public async Task ExportMarkdownAsync(ProjectInfo project)
+    public async Task ExportMarkdownAsync(ProjectInfo project,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
@@ -112,7 +120,7 @@ public class ExportService
                 string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.md");
 
                 var cfg = _config.Config.ManualGen;
-                await _mdWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateMarkdownPath);
+                await _mdWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateMarkdownPath, progress, ct);
 
                 await RecordExport(project, ExportType.Markdown, Path.Combine("exports", Path.GetFileName(outPath)));
                 OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
@@ -133,7 +141,9 @@ public class ExportService
     }
 
     /// <summary>Word 手順書を exports/ へ生成する（FR-PJ05）。</summary>
-    public async Task ExportDocxAsync(ProjectInfo project)
+    public async Task ExportDocxAsync(ProjectInfo project,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
@@ -149,7 +159,7 @@ public class ExportService
                 string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.docx");
 
                 var cfg = _config.Config.ManualGen;
-                await _docxWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateDotxPath);
+                await _docxWriter.WriteAsync(session, outPath, cfg.ChapterTimeGapMinutes, cfg.TemplateDotxPath, progress, ct);
 
                 await RecordExport(project, ExportType.Docx, Path.Combine("exports", Path.GetFileName(outPath)));
                 OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
@@ -170,7 +180,9 @@ public class ExportService
     }
 
     /// <summary>HTML 手順書を exports/ へ生成する（FR-A）。</summary>
-    public async Task ExportHtmlAsync(ProjectInfo project)
+    public async Task ExportHtmlAsync(ProjectInfo project,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         _notifier?.BeginProcessing();
         var sem = GetLock(project.ProjectId);
@@ -184,7 +196,7 @@ public class ExportService
             string slug = MakeSlug(project.Title);
             string outPath = Path.Combine(project.ProjectFolder, "exports", $"{ts}_{slug}.html");
 
-            await _htmlWriter.WriteAsync(project, outPath);
+            await _htmlWriter.WriteAsync(project, outPath, progress, ct);
 
             await RecordExport(project, ExportType.Html, Path.Combine("exports", Path.GetFileName(outPath)));
             OpenFolderIfEnabled(Path.GetDirectoryName(outPath)!);
@@ -203,14 +215,16 @@ public class ExportService
     }
 
     /// <summary>動画を exports/ へ生成する（FR-PJ06）。バックグラウンド実行。</summary>
-    public async Task ExportVideoAsync(ProjectInfo project)
+    public async Task ExportVideoAsync(ProjectInfo project,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         _notifier?.BeginProcessing();
         var (session, temps) = BuildAnnotatedSession(project);
         if (session.Steps.Count == 0) { CleanupTemps(temps); _notifier?.EndProcessing(); return; }
         try
         {
-            await _videoGenerator.GenerateAsync(session);
+            await _videoGenerator.GenerateAsync(session, progress, ct);
         }
         catch (Exception ex)
         {
@@ -225,19 +239,24 @@ public class ExportService
     }
 
     /// <summary>プロジェクト（images/ + thumbs/ + project.json）を ZIP に圧縮する（FR-PJ07）。</summary>
-    public async Task ExportZipAsync(ProjectInfo project, string destZipPath)
+    public async Task ExportZipAsync(ProjectInfo project, string destZipPath,
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         var sem = GetLock(project.ProjectId);
         await sem.WaitAsync();
         try
         {
+            int zipN = 0;
             await Task.Run(() =>
             {
                 using var zip = ZipFile.Open(destZipPath, ZipArchiveMode.Create);
                 AddFolderToZip(zip, project.ProjectFolder, "project.json");
-                AddDirectoryToZip(zip, Path.Combine(project.ProjectFolder, "images"), "images");
-                AddDirectoryToZip(zip, Path.Combine(project.ProjectFolder, "thumbs"), "thumbs");
-            });
+                AddDirectoryToZip(zip, Path.Combine(project.ProjectFolder, "images"), "images",
+                    f => { zipN++; progress?.Report(new AutoScreenshot.Models.ExportProgress("ZIP を作成中...", zipN, 0, destZipPath)); ct.ThrowIfCancellationRequested(); });
+                AddDirectoryToZip(zip, Path.Combine(project.ProjectFolder, "thumbs"), "thumbs",
+                    f => { zipN++; progress?.Report(new AutoScreenshot.Models.ExportProgress("ZIP を作成中...", zipN, 0, destZipPath)); });
+            }, ct);
 
             Log.Information("ZIP エクスポート完了: {Path}", destZipPath);
         }
@@ -371,7 +390,8 @@ public class ExportService
         if (File.Exists(path)) zip.CreateEntryFromFile(path, entryName);
     }
 
-    private static void AddDirectoryToZip(ZipArchive zip, string dirPath, string entryPrefix)
+    private static void AddDirectoryToZip(ZipArchive zip, string dirPath, string entryPrefix,
+        Action<string>? onEach = null)
     {
         if (!Directory.Exists(dirPath)) return;
         foreach (var file in Directory.GetFiles(dirPath, "*", SearchOption.AllDirectories))
@@ -379,6 +399,7 @@ public class ExportService
             string rel = Path.GetRelativePath(dirPath, file).Replace('\\', '/');
             string entry = $"{entryPrefix}/{rel}";
             zip.CreateEntryFromFile(file, entry);
+            onEach?.Invoke(file);
         }
     }
 }

@@ -14,10 +14,12 @@ namespace AutoScreenshot.Services;
 public class DocxManualWriter
 {
     public async Task WriteAsync(ManualSession session, string outputPath,
-        int chapterTimeGapMinutes = 5, string templateDotxPath = "")
+        int chapterTimeGapMinutes = 5, string templateDotxPath = "",
+        IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+        CancellationToken ct = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        await Task.Run(() => new Generator(session, outputPath, chapterTimeGapMinutes, templateDotxPath).Run());
+        await Task.Run(() => new Generator(session, outputPath, chapterTimeGapMinutes, templateDotxPath, progress, ct).Run(), ct);
         Log.Information("手順書 docx 出力完了: {Path}", outputPath);
     }
 
@@ -28,14 +30,21 @@ public class DocxManualWriter
         private readonly string _outputPath;
         private readonly int _timeGapMin;
         private readonly string _templateDotxPath;
+        private readonly IProgress<AutoScreenshot.Models.ExportProgress>? _progress;
+        private readonly CancellationToken _ct;
         private uint _drawId;
 
-        public Generator(ManualSession session, string outputPath, int timeGapMin, string templateDotxPath = "")
+        public Generator(ManualSession session, string outputPath, int timeGapMin,
+            string templateDotxPath = "",
+            IProgress<AutoScreenshot.Models.ExportProgress>? progress = null,
+            CancellationToken ct = default)
         {
-            _session         = session;
-            _outputPath      = outputPath;
-            _timeGapMin      = timeGapMin;
+            _session          = session;
+            _outputPath       = outputPath;
+            _timeGapMin       = timeGapMin;
             _templateDotxPath = templateDotxPath;
+            _progress         = progress;
+            _ct               = ct;
         }
 
         public void Run()
@@ -224,6 +233,7 @@ public class DocxManualWriter
         {
             var chapters  = BuildChapters(_session.Steps);
             int stepCount = 0;
+            int totalSteps = _session.Steps.Count;
 
             for (int ci = 0; ci < chapters.Count; ci++)
             {
@@ -233,12 +243,16 @@ public class DocxManualWriter
                 DateTime? lastTs = null;
                 foreach (var step in steps)
                 {
+                    _ct.ThrowIfCancellationRequested();
+
                     if (lastTs.HasValue &&
                         (step.Timestamp - lastTs.Value).TotalMinutes >= _timeGapMin)
                         body.Append(Para($"{step.Timestamp:HH:mm}〜", "Heading3"));
                     lastTs = step.Timestamp;
 
                     stepCount++;
+                    _progress?.Report(new AutoScreenshot.Models.ExportProgress(
+                        "Word 手順書を生成中...", stepCount, totalSteps, _outputPath));
                     string desc   = step.DescriptionLlm ?? step.DescriptionRuleBased;
                     string review = step.NeedsReview ? "　※要確認" : "";
                     body.Append(Para($"{stepCount}. {desc}{review}", "Normal"));

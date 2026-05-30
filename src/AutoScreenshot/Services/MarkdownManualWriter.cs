@@ -8,7 +8,8 @@ namespace AutoScreenshot.Services;
 public class MarkdownManualWriter
 {
     public async Task WriteAsync(ManualSession session, string outputPath,
-        int chapterTimeGapMinutes = 5, string templatePath = "")
+        int chapterTimeGapMinutes = 5, string templatePath = "",
+        IProgress<ExportProgress>? progress = null, CancellationToken ct = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         string outputDir = Path.GetDirectoryName(outputPath)!;
@@ -52,16 +53,18 @@ public class MarkdownManualWriter
 
         // 本文
         int globalStep = 0;
+        int totalSteps = session.Steps.Count;
         for (int ci = 0; ci < chapters.Count; ci++)
         {
             var chapter = chapters[ci];
             sb.AppendLine($"## {ci + 1}. {chapter.DisplayTitle}");
             sb.AppendLine();
 
-
             DateTime? lastStepTime = null;
             foreach (var step in chapter.Steps)
             {
+                ct.ThrowIfCancellationRequested();
+
                 // 時間ギャップで小見出し
                 if (lastStepTime.HasValue &&
                     (step.Timestamp - lastStepTime.Value).TotalMinutes >= chapter.TimeGapMinutes)
@@ -72,6 +75,7 @@ public class MarkdownManualWriter
                 lastStepTime = step.Timestamp;
 
                 globalStep++;
+                progress?.Report(new ExportProgress("Markdown 手順書を生成中...", globalStep, totalSteps, outputPath));
                 string desc = step.DescriptionLlm ?? step.DescriptionRuleBased;
                 string reviewMark = step.NeedsReview ? " <!-- TODO: UI名を確認してください -->" : "";
                 sb.AppendLine($"{globalStep}. {desc}{reviewMark}");

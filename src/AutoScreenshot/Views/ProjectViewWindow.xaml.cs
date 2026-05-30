@@ -864,44 +864,85 @@ public partial class ProjectViewWindow : Window
         }
     }
 
+    // ---- エクスポート進捗ウィンドウ統合ヘルパー（FR-H6） ----
+
+    private async Task RunExportWithProgress(
+        string label,
+        Func<AutoScreenshot.Services.ExportProgressAdapter, Task> exportAction)
+    {
+        var win = new AutoScreenshot.Views.ExportProgressWindow();
+        win.Show();
+
+        var adapter = new AutoScreenshot.Services.ExportProgressAdapter(
+            p => Dispatcher.BeginInvoke(() =>
+            {
+                // ユーザーが × ボタンでウィンドウを閉じた後に呼ばれても安全に無視する
+                if (win.IsLoaded) win.UpdateProgress(p);
+            }),
+            win.CancellationToken);
+
+        SetStatus($"{label}中...", busy: true);
+        try
+        {
+            await exportAction(adapter);
+            if (win.IsLoaded) win.MarkCompleted();
+            SetStatus($"{label}完了。");
+        }
+        catch (OperationCanceledException)
+        {
+            if (win.IsLoaded) win.MarkCancelled();
+            SetStatus($"{label}キャンセルされました。");
+        }
+        catch (Exception ex)
+        {
+            if (win.IsLoaded) win.MarkCompleted();
+            Log.Error(ex, "{Label} 失敗", label);
+            SetStatus($"{label}失敗。");
+        }
+        finally
+        {
+            SetStatus(string.Empty, busy: false);
+        }
+    }
+
     private async void BtnExportImages_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("画像をエクスポート中...", busy: true);
-        await _exportService.ExportImagesAsync(_selectedProject);
-        SetStatus("画像エクスポート完了。");
+        var proj = _selectedProject;
+        await RunExportWithProgress("画像エクスポート",
+            a => _exportService.ExportImagesAsync(proj, a.Progress, a.Token));
     }
 
     private async void BtnExportMarkdown_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("Markdown 手順書を生成中...", busy: true);
-        await _exportService.ExportMarkdownAsync(_selectedProject);
-        SetStatus("Markdown エクスポート完了。");
+        var proj = _selectedProject;
+        await RunExportWithProgress("Markdown エクスポート",
+            a => _exportService.ExportMarkdownAsync(proj, a.Progress, a.Token));
     }
 
     private async void BtnExportHtml_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("HTML 手順書を生成中...", busy: true);
-        await _exportService.ExportHtmlAsync(_selectedProject);
-        SetStatus("HTML エクスポート完了。");
+        var proj = _selectedProject;
+        await RunExportWithProgress("HTML エクスポート",
+            a => _exportService.ExportHtmlAsync(proj, a.Progress, a.Token));
     }
 
     private async void BtnExportDocx_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("Word 手順書を生成中...", busy: true);
-        await _exportService.ExportDocxAsync(_selectedProject);
-        SetStatus("Word エクスポート完了。");
+        var proj = _selectedProject;
+        await RunExportWithProgress("Word エクスポート",
+            a => _exportService.ExportDocxAsync(proj, a.Progress, a.Token));
     }
 
     private async void BtnExportVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject == null) return;
-        SetStatus("動画生成中...", busy: true);
-        await _exportService.ExportVideoAsync(_selectedProject);
-        SetStatus("動画生成完了。");
+        var proj = _selectedProject;
+        await RunExportWithProgress("動画生成",
+            a => _exportService.ExportVideoAsync(proj, a.Progress, a.Token));
     }
 
     private async void BtnExportZip_Click(object sender, RoutedEventArgs e)
@@ -916,9 +957,12 @@ public partial class ProjectViewWindow : Window
         };
         if (dlg.ShowDialog() != true) return;
 
+        string zipPath = dlg.FileName;
+        var proj = _selectedProject;
         SetStatus("ZIP を作成中...", busy: true);
-        await _exportService.ExportZipAsync(_selectedProject, dlg.FileName);
-        SetStatus($"ZIP エクスポート完了: {dlg.FileName}");
+        await RunExportWithProgress("ZIP エクスポート",
+            a => _exportService.ExportZipAsync(proj, zipPath, a.Progress, a.Token));
+        SetStatus($"ZIP エクスポート完了: {zipPath}");
     }
 
     // ---- その他 ----

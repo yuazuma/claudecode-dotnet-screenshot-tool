@@ -20,10 +20,12 @@ public class VideoGenerator
     }
 
     /// <summary>セッションから動画を非同期生成する。</summary>
-    public Task GenerateAsync(ManualSession session)
-        => Task.Run(() => Generate(session));
+    public Task GenerateAsync(ManualSession session,
+        IProgress<ExportProgress>? progress = null, CancellationToken ct = default)
+        => Task.Run(() => Generate(session, progress, ct), ct);
 
-    private void Generate(ManualSession session)
+    private void Generate(ManualSession session,
+        IProgress<ExportProgress>? progress = null, CancellationToken ct = default)
     {
         var cfg = _config.Config.VideoGen;
         if (!cfg.OutputApng && !cfg.OutputMp4)
@@ -46,7 +48,7 @@ public class VideoGenerator
         {
             if (cfg.VideoUnit == VideoUnit.Session)
             {
-                GenerateForSteps(cfg, session.Title, session.StartedAt, steps, 0);
+                GenerateForSteps(cfg, session.Title, session.StartedAt, steps, 0, progress, ct);
             }
             else
             {
@@ -54,9 +56,10 @@ public class VideoGenerator
                 var chapters = GroupByChapter(steps);
                 for (int i = 0; i < chapters.Count; i++)
                 {
+                    ct.ThrowIfCancellationRequested();
                     var (winTitle, chapterSteps) = chapters[i];
                     string title = $"{session.Title}_{(i + 1):D2}_{MakeSlug(winTitle)}";
-                    GenerateForSteps(cfg, title, chapterSteps[0].Timestamp, chapterSteps, i + 1);
+                    GenerateForSteps(cfg, title, chapterSteps[0].Timestamp, chapterSteps, i + 1, progress, ct);
                 }
             }
 
@@ -64,7 +67,7 @@ public class VideoGenerator
 
             if (cfg.OpenFolderOnComplete)
             {
-                string folder = ResolveOutputFolder(cfg);
+                string folder = ResolveOutputFolder(cfg, session);
                 if (Directory.Exists(folder))
                     System.Diagnostics.Process.Start("explorer.exe", folder);
             }
@@ -77,9 +80,12 @@ public class VideoGenerator
     }
 
     private void GenerateForSteps(VideoGenConfig cfg, string title, DateTime startedAt,
-        List<ManualStep> steps, int chapterIndex)
+        List<ManualStep> steps, int chapterIndex,
+        IProgress<ExportProgress>? progress = null, CancellationToken ct = default)
     {
-        string folder   = ResolveOutputFolder(cfg);
+        // title/startedAt を使って簡易 ManualSession を組む（フォルダ解決用）
+        var sessionMock = new ManualSession { Title = title };
+        string folder   = ResolveOutputFolder(cfg, sessionMock);
         Directory.CreateDirectory(folder);
         string slug     = MakeSlug(title);
         string ts       = startedAt.ToString("yyyyMMdd_HHmmss");
@@ -106,6 +112,8 @@ public class VideoGenerator
             {
                 for (int i = 0; i < steps.Count; i++)
                 {
+                    ct.ThrowIfCancellationRequested();
+                    progress?.Report(new ExportProgress("APNG を生成中...", i + 1, steps.Count, apngPath));
                     double dur = CalcFrameDuration(cfg, steps, i, wavSamples?[i]);
                     var frames = renderer.Render(steps[i], targetSize);
                     try
@@ -146,6 +154,8 @@ public class VideoGenerator
 
                 for (int i = 0; i < steps.Count; i++)
                 {
+                    ct.ThrowIfCancellationRequested();
+                    progress?.Report(new ExportProgress("MP4 を生成中...", i + 1, steps.Count, mp4Path));
                     double dur = CalcFrameDuration(cfg, steps, i, wavSamples?[i]);
                     var frames = renderer.Render(steps[i], targetSize);
                     try
@@ -248,11 +258,18 @@ public class VideoGenerator
         return chapters;
     }
 
-    // ── 出力フォルダパス解決 ──────────────────────────────────────────────────
-    private string ResolveOutputFolder(VideoGenConfig cfg)
-        => string.IsNullOrWhiteSpace(cfg.VideoOutputFolder)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "AutoScreenshot")
-            : cfg.VideoOutputFolder;
+    // ── 出力フォルダパス解決（FR-H3: テンプレート評価） ──────────────────────
+    private string ResolveOutputFolder(VideoGenConfig cfg, ManualSession session)
+    {
+        string baseFolder = !string.IsNullOrWhiteSpace(cfg.VideoBaseFolder)
+            ? cfg.VideoBaseFolder
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "AutoScreenshot");
+        string subFolder = FolderTemplateService.Evaluate(
+            cfg.VideoFolderTemplate, session.StartedAt, session.Title);
+        return string.IsNullOrEmpty(subFolder)
+            ? baseFolder
+            : Path.Combine(baseFolder, subFolder);
+    }
 
     // ── スラッグ生成 ──────────────────────────────────────────────────────────
     private static string MakeSlug(string title)

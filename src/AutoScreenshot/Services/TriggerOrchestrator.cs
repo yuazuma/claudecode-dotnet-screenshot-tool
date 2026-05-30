@@ -128,7 +128,8 @@ public class TriggerOrchestrator : IDisposable
                 if (cfg.Privacy.MaskPasswordFields)
                     _masking.ApplyMasking(bmp, bounds);
 
-                byte[] data = _capture.Encode(bmp, Models.ImageFormat.Png);
+                // before 画像: after と同じフォーマット設定を使用し、ロスレスで保存する（FR-H1）
+                byte[] data = _capture.Encode(bmp, cfg.Storage.ImageFormat, lossless: true);
                 bmp.Dispose();
 
                 var evt = new TriggerEvent(trigger, now, cursorPos, title, procName, monitorIdx);
@@ -300,7 +301,8 @@ public class TriggerOrchestrator : IDisposable
                     if (cfg.Metadata.BurnTimestamp)
                         _capture.BurnTimestamp(bmp, evt.Timestamp);
 
-                    byte[] data = _capture.Encode(bmp, cfg.Storage.ImageFormat, cfg.Storage.JpegQuality);
+                    // after 画像: ロスレスで保存する（FR-H2）
+                    byte[] data = _capture.Encode(bmp, cfg.Storage.ImageFormat, cfg.Storage.JpegQuality, lossless: true);
                     string path = await _storage.SaveAsync(data, cfg.Storage.ImageFormat, evt);
                     bmp.Dispose();
 

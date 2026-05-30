@@ -66,21 +66,28 @@ public class CaptureService
     }
 
     /// <summary>画像をファイル形式に応じてエンコードし、バイト配列で返す</summary>
-    public byte[] Encode(Bitmap bmp, Models.ImageFormat format, int jpegQuality = 85)
+    /// <param name="lossless">
+    /// true の場合: JPEG は quality=100、WebP は lossless モードで保存する（証跡用途）。
+    /// false の場合: jpegQuality パラメーターを使用する（通常のサムネイル等）。
+    /// </param>
+    public byte[] Encode(Bitmap bmp, Models.ImageFormat format, int jpegQuality = 85, bool lossless = false)
     {
         using var ms = new System.IO.MemoryStream();
 
         switch (format)
         {
             case Models.ImageFormat.Jpeg:
+            {
+                int quality = lossless ? 100 : jpegQuality;
                 var jpegParams = new EncoderParameters(1);
-                jpegParams.Param[0] = new EncoderParameter(Encoder.Quality, (long)jpegQuality);
+                jpegParams.Param[0] = new EncoderParameter(Encoder.Quality, (long)quality);
                 var jpegCodec = GetCodecInfo("image/jpeg");
                 if (jpegCodec != null)
                     bmp.Save(ms, jpegCodec, jpegParams);
                 else
                     bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
                 break;
+            }
 
             case Models.ImageFormat.WebP:
             {
@@ -88,11 +95,14 @@ public class CaptureService
                 bmp.Save(pngBuf, System.Drawing.Imaging.ImageFormat.Png);
                 pngBuf.Position = 0;
                 using var img = ISImage.Load<Rgba32>(pngBuf);
-                img.Save(ms, new WebpEncoder { Quality = jpegQuality });
+                if (lossless)
+                    img.Save(ms, new WebpEncoder { FileFormat = SixLabors.ImageSharp.Formats.Webp.WebpFileFormatType.Lossless });
+                else
+                    img.Save(ms, new WebpEncoder { Quality = jpegQuality });
                 break;
             }
 
-            default: // PNG
+            default: // PNG (常にロスレス)
                 bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
                 break;
         }
