@@ -17,7 +17,9 @@ public sealed class MfVideoWriter : IDisposable
     [DllImport("mfreadwrite.dll", ExactSpelling = true)]
     private static extern int MFCreateSinkWriterFromURL(
         [MarshalAs(UnmanagedType.LPWStr)] string pwszOutputURL,
-        IntPtr pByteStream, IntPtr pAttributes, out IMFSinkWriter ppSinkWriter);
+        IntPtr pByteStream, [MarshalAs(UnmanagedType.IUnknown)] object? pAttributes,
+        out IMFSinkWriter ppSinkWriter);
+    [DllImport("mfplat.dll", ExactSpelling = true)] private static extern int MFCreateAttributes(out IMFAttributesMin ppMFAttributes, uint cInitialSize);
     [DllImport("mfplat.dll", ExactSpelling = true)] private static extern int MFCreateMediaType(out IMFMediaType ppMFType);
     [DllImport("mfplat.dll", ExactSpelling = true)] private static extern int MFCreateMemoryBuffer(uint cbMaxLength, out IMFMediaBuffer ppBuffer);
     [DllImport("mfplat.dll", ExactSpelling = true)] private static extern int MFCreateSample(out IMFSample ppIMFSample);
@@ -25,6 +27,12 @@ public sealed class MfVideoWriter : IDisposable
     private const uint MF_VERSION = 0x00020070;
 
     // ── GUID 定数 ─────────────────────────────────────────────────────────────
+    // MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS: 0 = ソフトウェア MFT のみ使用（Azure Server 対応）
+    private static readonly Guid MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS =
+        new("A634A91C-822B-41B9-A494-4DE4643612B0");
+    // MJPEG コーデック（H.264 が使えない環境でのフォールバック）
+    private static readonly Guid MFVideoFormat_MJPG =
+        new("47504A4D-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFMediaType_Video           = new("73646976-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFMediaType_Audio           = new("73647561-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_H264          = new("34363248-0000-0010-8000-00AA00389B71");
@@ -60,17 +68,28 @@ public sealed class MfVideoWriter : IDisposable
     private int  _sampleRate  = 44100;
     private int  _channels    = 1;
     private int  _bitsPerSamp = 16;
+    private readonly bool _useMjpeg;  // true = MJPEG フォールバックモード
 
-    public MfVideoWriter(string outputPath, int width, int height, int fps, int bitrateMbps)
+    public MfVideoWriter(string outputPath, int width, int height, int fps, int bitrateMbps,
+        bool useMjpeg = false)
     {
         _width      = width  % 2 == 0 ? width  : width  - 1;
         _height     = height % 2 == 0 ? height : height - 1;
         _fps        = fps;
         _bitrateBps = bitrateMbps * 1_000_000;
+        _useMjpeg   = useMjpeg;
 
         ThrowIfFailed(MFStartup(MF_VERSION, 0), "MFStartup");
-        ThrowIfFailed(MFCreateSinkWriterFromURL(outputPath, IntPtr.Zero, IntPtr.Zero, out _writer),
-            "MFCreateSinkWriterFromURL");
+
+        // MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS = 0 を設定してソフトウェアエンコーダーを強制する。
+        // この属性なしでは Azure / Windows Server 環境でハードウェア加速 (DXVA2/D3D11) が
+        // 利用できず Finalize 時に E_UNEXPECTED が返る問題を回避する。
+        ThrowIfFailed(MFCreateAttributes(out var attrs, 1), "MFCreateAttributes");
+        var hwKey = MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS;
+        attrs.SetUINT32(ref hwKey, 0u);
+        int hr = MFCreateSinkWriterFromURL(outputPath, IntPtr.Zero, attrs, out _writer);
+        Marshal.ReleaseComObject(attrs);
+        ThrowIfFailed(hr, "MFCreateSinkWriterFromURL");
 
         _videoStreamIndex = AddVideoStream();
     }
@@ -119,7 +138,15 @@ public sealed class MfVideoWriter : IDisposable
         if (_writer == null) return;
         EnsureBegun();
         int hr = _writer.Finalize();
-        if (hr < 0) Log.Warning("IMFSinkWriter.Finalize HRESULT=0x{Hr:X8}", (uint)hr);
+        if (hr < 0)
+        {
+            // 例外として投げることで呼び出し元（VideoGenerator）が失敗を検知できる。
+            // 黙って飲み込むと 0 バイトの MP4 を「成功」と誤ログする問題を防ぐ。
+            Log.Error("IMFSinkWriter.Finalize 失敗 HRESULT=0x{Hr:X8} — H.264 コーデックが利用できない可能性があります", (uint)hr);
+            throw new System.Runtime.InteropServices.COMException(
+                $"IMFSinkWriter.Finalize に失敗しました (HRESULT=0x{(uint)hr:X8})。" +
+                " H.264 エンコーダーが利用できないか、フレームが書き込まれていない可能性があります。", hr);
+        }
     }
 
     // ── 内部実装 ──────────────────────────────────────────────────────────────
@@ -127,8 +154,8 @@ public sealed class MfVideoWriter : IDisposable
     {
         MFCreateMediaType(out var outMt);
         MfSetG(outMt, MF_MT_MAJOR_TYPE,       MFMediaType_Video);
-        MfSetG(outMt, MF_MT_SUBTYPE,           MFVideoFormat_H264);
-        MfSetU(outMt, MF_MT_AVG_BITRATE,       (uint)_bitrateBps);
+        MfSetG(outMt, MF_MT_SUBTYPE,           _useMjpeg ? MFVideoFormat_MJPG : MFVideoFormat_H264);
+        if (!_useMjpeg) MfSetU(outMt, MF_MT_AVG_BITRATE, (uint)_bitrateBps); // MJPEG は品質ベースのため不要
         MfSetU(outMt, MF_MT_INTERLACE_MODE,    2u);
         MfSetQ(outMt, MF_MT_FRAME_SIZE,        _width,  _height);
         MfSetQ(outMt, MF_MT_FRAME_RATE,        _fps,    1);
@@ -235,6 +262,37 @@ public sealed class MfVideoWriter : IDisposable
     }
 
     // ── COM インターフェース定義 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// IMFAttributes の最小定義。MFCreateAttributes で取得した属性オブジェクトへの
+    /// SetUINT32 のみを使用する。vtable 順序は Windows SDK 仕様に準拠。
+    /// </summary>
+    [ComImport, Guid("2CD2D921-C447-44A7-A13C-4ADABFC247E3"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFAttributesMin
+    {
+        [PreserveSig] int GetItem(ref Guid guidKey, IntPtr pValue);
+        [PreserveSig] int GetItemType(ref Guid guidKey, out int pType);
+        [PreserveSig] int CompareItem(ref Guid guidKey, IntPtr value, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int Compare([MarshalAs(UnmanagedType.IUnknown)] object pTheirs, int MatchType, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
+        [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
+        [PreserveSig] int GetDouble(ref Guid guidKey, out double pfValue);
+        [PreserveSig] int GetGUID(ref Guid guidKey, out Guid pguidValue);
+        [PreserveSig] int GetStringLength(ref Guid guidKey, out int pcchLength);
+        [PreserveSig] int GetString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszValue, int cchBufSize, IntPtr pcchLength);
+        [PreserveSig] int GetAllocatedString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] out string ppwszValue, out int pcchLength);
+        [PreserveSig] int GetBlobSize(ref Guid guidKey, out int pcbBlobSize);
+        [PreserveSig] int GetBlob(ref Guid guidKey, [Out] byte[] pBuf, int cbBufSize, IntPtr pcbBlobSize);
+        [PreserveSig] int GetAllocatedBlob(ref Guid guidKey, out IntPtr ppBuf, out int pcbSize);
+        [PreserveSig] int GetUnknown(ref Guid guidKey, ref Guid riid, out IntPtr ppv);
+        [PreserveSig] int SetItem(ref Guid guidKey, IntPtr value);
+        [PreserveSig] int DeleteItem(ref Guid guidKey);
+        [PreserveSig] int DeleteAllItems();
+        [PreserveSig] int SetUINT32(ref Guid guidKey, uint unValue);
+        // 以降のメソッドは使用しないが vtable 上に存在することに注意
+    }
+
     [ComImport, Guid("3137f1cd-fe5e-4805-a5d8-fb477448cb3d"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IMFSinkWriter

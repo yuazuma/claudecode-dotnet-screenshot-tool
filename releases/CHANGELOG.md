@@ -6,11 +6,35 @@
 
 ---
 
-## [1.7.1] — TBD
+## [1.7.1] — 2026-05-30
+
+### Added（追加）
+
+- **`--export` CLI フラグによるヘッドレスエクスポート**
+  - `AutoScreenshot.exe --export <プロジェクトパス> [--type md,html,video,images,zip]` で GUI 不要のエクスポートが可能
+  - 終了コード: 0=成功、1=部分失敗、2=引数エラー
+  - RDP / 無人実行環境での動作確認・自動化に利用可能
+
+- **MP4 エクスポートの Azure Windows Server 2025 対応**
+  - H.264 MFT (IMFSinkWriter) が利用できない環境向けフォールバック を 2 段階追加:
+    1. `H264Mp4Writer`: H.264 MFT を直接使用（MPEG-4 マルチプレクサーをバイパス）
+    2. `FfmpegMp4Writer`: FFmpeg を使用（PATH または既知パスから `ffmpeg.exe` を検索）
+  - AVI フォールバックを廃止し、MP4（H.264）のみを出力する
 
 ### Fixed（修正）
 
-<!-- 実装後に記入 -->
+- **JSON プロパティ名重複によるデシリアライズエラー**
+  - `ManualGenConfig.OutputFolder` と `LegacyOutputFolder` が両方 `"outputFolder"` にシリアライズされ
+    config.json の読み込み時に例外が発生していた問題を修正
+  - `OutputFolder` フィールドを削除し `VideoOutputFolder` に統一
+
+- **フォルダテンプレートで `.ascproj` の `s` が秒として展開される問題**
+  - `.ascproj` 拡張子の `s` が `DateTime.ToString("s")` の秒指定子として誤って処理されていた問題を修正
+  - `ProtectFromDateTime()` でプレースホルダー値を一時エスケープし、DateTime 書式展開後に解除
+
+- **`FfmpegMp4Writer.AddFrame` で JPEG 保存に失敗する問題**
+  - アルファチャンネルを持つ Bitmap を JPEG で保存すると `ArgumentException` が発生していた問題を修正
+  - 保存前に `Format24bppRgb` に変換してから保存するよう変更
 
 ### Changed（変更）
 

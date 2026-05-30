@@ -250,6 +250,8 @@ public class ExportService
             int zipN = 0;
             await Task.Run(() =>
             {
+                // 既存ファイルを削除してから新規作成（上書き）
+                if (File.Exists(destZipPath)) File.Delete(destZipPath);
                 using var zip = ZipFile.Open(destZipPath, ZipArchiveMode.Create);
                 AddFolderToZip(zip, project.ProjectFolder, "project.json");
                 AddDirectoryToZip(zip, Path.Combine(project.ProjectFolder, "images"), "images",

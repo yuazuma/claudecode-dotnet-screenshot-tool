@@ -143,44 +143,144 @@ public class VideoGenerator
         if (cfg.OutputMp4)
         {
             string mp4Path = Path.Combine(folder, baseName + ".mp4");
+
+            // フレームをキャッシュしておき H.264 失敗時に MJPEG でリトライする
+            var cachedFrames = new List<(List<System.Drawing.Bitmap> bitmaps, double dur)>();
+
+            // Step 1: フレームをレンダリングしてキャッシュ
+            for (int i = 0; i < steps.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                double dur = CalcFrameDuration(cfg, steps, i, wavSamples?[i]);
+                var bitmaps = renderer.Render(steps[i], targetSize);
+                cachedFrames.Add((bitmaps, dur));
+            }
+
+            // Step 2: H.264 でエンコード（失敗時は MJPEG にフォールバック）
+            bool mp4Success = false;
+
+            // Step 2a: まず Media Foundation (H.264) で試みる
             try
             {
                 using var mp4 = new MfVideoWriter(mp4Path, targetSize.Width, targetSize.Height,
                     fps: 1, bitrateMbps: cfg.Mp4VideoBitrateMbps);
 
-                // 最初の WAV から音声パラメーターを設定
                 byte[]? firstWav = wavSamples?.FirstOrDefault(w => w != null);
                 if (firstWav != null) mp4.EnableAudio(firstWav);
 
-                for (int i = 0; i < steps.Count; i++)
+                for (int i = 0; i < cachedFrames.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    progress?.Report(new ExportProgress("MP4 を生成中...", i + 1, steps.Count, mp4Path));
-                    double dur = CalcFrameDuration(cfg, steps, i, wavSamples?[i]);
-                    var frames = renderer.Render(steps[i], targetSize);
-                    try
+                    progress?.Report(new ExportProgress("MP4 を生成中...", i + 1, cachedFrames.Count, mp4Path));
+                    var (bitmaps, dur) = cachedFrames[i];
+                    if (bitmaps.Count > 1)
                     {
-                        if (frames.Count > 1)
-                        {
-                            double rippleDur = 0.15;
-                            double mainDur   = Math.Max(dur - rippleDur * (frames.Count - 1), 0.5);
-                            mp4.AddVideoFrame(frames[0], mainDur);
-                            for (int fi = 1; fi < frames.Count; fi++)
-                                mp4.AddVideoFrame(frames[fi], rippleDur);
-                        }
-                        else
-                        {
-                            mp4.AddVideoFrame(frames[0], dur);
-                        }
+                        double rippleDur = 0.15;
+                        double mainDur   = Math.Max(dur - rippleDur * (bitmaps.Count - 1), 0.5);
+                        mp4.AddVideoFrame(bitmaps[0], mainDur);
+                        for (int fi = 1; fi < bitmaps.Count; fi++)
+                            mp4.AddVideoFrame(bitmaps[fi], rippleDur);
                     }
-                    finally { foreach (var f in frames) f.Dispose(); }
-
+                    else
+                    {
+                        mp4.AddVideoFrame(bitmaps[0], dur);
+                    }
                     mp4.AddAudioSample(wavSamples?[i]);
                 }
                 mp4.FinalizeFile();
-                Log.Information("MP4 書き出し完了: {Path}", mp4Path);
+                Log.Information("MP4 (H.264) 書き出し完了: {Path}", mp4Path);
+                mp4Success = true;
             }
-            catch (Exception ex) { Log.Error(ex, "MP4 生成失敗: {Path}", mp4Path); }
+            catch (Exception exH264)
+            {
+                Log.Warning(exH264, "MP4 (H.264) 失敗。純 .NET MJPEG-in-MP4 にフォールバックします: {Path}", mp4Path);
+                try { if (File.Exists(mp4Path)) File.Delete(mp4Path); } catch { }
+            }
+
+            // Step 2b: IMFSinkWriter H.264 が失敗した場合は H264Mp4Writer（直接 MFT + 自前 MP4 コンテナ）で再試行
+            if (!mp4Success)
+            {
+                try
+                {
+                    using var h264 = new H264Mp4Writer(mp4Path, targetSize.Width, targetSize.Height,
+                        fps: 1, bitrateMbps: cfg.Mp4VideoBitrateMbps);
+
+                    for (int i = 0; i < cachedFrames.Count; i++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        progress?.Report(new ExportProgress("MP4 (H.264直接) を生成中...", i + 1, cachedFrames.Count, mp4Path));
+                        var (bitmaps, dur) = cachedFrames[i];  // dur は秒単位
+                        if (bitmaps.Count > 1)
+                        {
+                            double rippleDur = 0.15;
+                            double mainDur   = Math.Max(dur - rippleDur * (bitmaps.Count - 1), 0.5);
+                            h264.AddVideoFrame(bitmaps[0], mainDur);
+                            for (int fi = 1; fi < bitmaps.Count; fi++)
+                                h264.AddVideoFrame(bitmaps[fi], rippleDur);
+                        }
+                        else
+                        {
+                            h264.AddVideoFrame(bitmaps[0], dur);
+                        }
+                    }
+                    h264.FinalizeFile();
+                    Log.Information("MP4 (H.264直接 MFT) 書き出し完了: {Path}", mp4Path);
+                    mp4Success = true;
+                }
+                catch (Exception exH264Direct)
+                {
+                    Log.Error(exH264Direct, "MP4 (H.264直接 MFT) も失敗: {Path}", mp4Path);
+                    try { if (File.Exists(mp4Path)) File.Delete(mp4Path); } catch { }
+                }
+            }
+
+            // Step 2c: FFmpeg 経由で H.264 MP4（H.264 MFT が存在しない Azure Server 等向け）
+            if (!mp4Success)
+            {
+                try
+                {
+                    using var ffmpeg = new FfmpegMp4Writer(mp4Path, targetSize.Width, targetSize.Height);
+
+                    for (int i = 0; i < cachedFrames.Count; i++)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        progress?.Report(new ExportProgress("MP4 (FFmpeg) を生成中...", i + 1, cachedFrames.Count, mp4Path));
+                        var (bitmaps, dur) = cachedFrames[i];  // dur は秒単位
+                        if (bitmaps.Count > 1)
+                        {
+                            double rippleDur = 0.15;
+                            double mainDur   = Math.Max(dur - rippleDur * (bitmaps.Count - 1), 0.5);
+                            ffmpeg.AddFrame(bitmaps[0], mainDur);
+                            for (int fi = 1; fi < bitmaps.Count; fi++)
+                                ffmpeg.AddFrame(bitmaps[fi], rippleDur);
+                        }
+                        else
+                        {
+                            ffmpeg.AddFrame(bitmaps[0], dur);
+                        }
+                    }
+                    ffmpeg.FinalizeFile();
+                    Log.Information("MP4 (FFmpeg H.264) 書き出し完了: {Path}", mp4Path);
+                    mp4Success = true;
+                }
+                catch (Exception exFfmpeg)
+                {
+                    Log.Error(exFfmpeg, "MP4 (FFmpeg) も失敗: {Path}", mp4Path);
+                    try { if (File.Exists(mp4Path)) File.Delete(mp4Path); } catch { }
+                }
+            }
+
+            if (!mp4Success)
+            {
+                Log.Error(
+                    "MP4 の生成に失敗しました。H.264 エンコーダーが必要です。" +
+                    "ffmpeg.exe をアプリフォルダまたは PATH に配置するか、" +
+                    "管理者権限で DISM /Online /Add-Capability /CapabilityName:Media.MediaFeaturePack~~~~0.0.1.0 を実行してください。");
+            }
+
+            // キャッシュしたビットマップを解放
+            foreach (var (bitmaps, _) in cachedFrames)
+                foreach (var b in bitmaps) b.Dispose();
         }
     }
 

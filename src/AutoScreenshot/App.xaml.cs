@@ -18,8 +18,44 @@ public partial class App : Application
     private static Mutex? _mutex;
     private NotifyIconWrapper? _notifyIconWrapper;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
+        // ── コマンドラインエクスポートモード（--export） ──────────────────────
+        // 通常の UI を表示せずにプロジェクトをエクスポートして終了する。
+        // 例: AutoScreenshot.exe --export "C:\...\project.ascproj" --type md,video
+        if (e.Args.Contains("--export"))
+        {
+            ConfigureLogging();
+
+            if (e.Args.Contains("--help") || e.Args.Contains("-h"))
+            {
+                Console.WriteLine(ExportCliRunner.Usage);
+                Environment.Exit(0);
+                return;
+            }
+
+            int exitCode;
+            try
+            {
+                exitCode = await ExportCliRunner.RunAsync(e.Args);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[CLI] 予期しないエラーが発生しました");
+                Console.Error.WriteLine($"予期しないエラー: {ex.Message}");
+                exitCode = 2;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
+
+            Environment.Exit(exitCode);
+            return;
+        }
+
+        // ── 通常の起動（トレイアイコンモード） ───────────────────────────────
+
         // 二重起動抑止
         _mutex = new Mutex(true, "AutoScreenshot_SingleInstance", out bool createdNew);
         if (!createdNew)
