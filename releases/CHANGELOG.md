@@ -6,7 +6,7 @@
 
 ---
 
-## [1.7.1] — 2026-05-30
+## [1.7.1] — 2026-05-31
 
 ### Added（追加）
 
@@ -21,6 +21,17 @@
     2. `FfmpegMp4Writer`: FFmpeg を使用（PATH または既知パスから `ffmpeg.exe` を検索）
   - AVI フォールバックを廃止し、MP4（H.264）のみを出力する
 
+- **RDP セッションでのスクリーンキャプチャ改善**
+  - `Windows.Graphics.Capture (WGC)` API を使用して DWM コンポジター出力を直接取得
+  - RDP セッション検出時に自動切替（非 RDP 環境は従来の GDI のまま）
+  - WGC 失敗時は GDI `CopyFromScreen` にフォールバック
+  - キャプチャ通知の黄色ボーダーを非表示（Windows 11 Build 22000+）
+
+- **Markdown 手順書の画像を `_images/` サブフォルダ管理に変更**
+  - MD ファイルと同階層に `{MDファイル名}_images/` を作成して画像をコピー
+  - VS Code・GitHub 等で画像が正常表示される（`../` を使わない相対パス）
+  - 横幅 > 1200px の画像を 1200px 幅にアスペクト比維持でリサイズ
+
 ### Fixed（修正）
 
 - **JSON プロパティ名重複によるデシリアライズエラー**
@@ -31,6 +42,13 @@
 - **フォルダテンプレートで `.ascproj` の `s` が秒として展開される問題**
   - `.ascproj` 拡張子の `s` が `DateTime.ToString("s")` の秒指定子として誤って処理されていた問題を修正
   - `ProtectFromDateTime()` でプレースホルダー値を一時エスケープし、DateTime 書式展開後に解除
+
+- **VideoGenerator のフレーム時間除算バグ**
+  - `CalcFrameDuration()` が返す秒単位の値を `10_000_000` で誤除算していた問題を修正
+
+- **Markdown 画像の重複コピー**
+  - before/after が同一画像ファイルを参照するステップで `step_001_1.png` 等の余分なコピーが生成される問題を修正
+  - ソースパスをキャッシュして重複コピーを防止
 
 - **`FfmpegMp4Writer.AddFrame` で JPEG 保存に失敗する問題**
   - アルファチャンネルを持つ Bitmap を JPEG で保存すると `ArgumentException` が発生していた問題を修正
