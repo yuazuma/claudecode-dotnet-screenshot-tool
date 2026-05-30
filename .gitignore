@@ -29,6 +29,7 @@ artifacts/
 # 発行成果物 (出力バイナリ)
 publish/
 publish_verify/
+publish_tmp/
 
 # OS 生成ファイル
 Thumbs.db
