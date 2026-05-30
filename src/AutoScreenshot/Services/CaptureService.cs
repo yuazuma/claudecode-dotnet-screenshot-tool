@@ -45,9 +45,23 @@ public class CaptureService
         return results;
     }
 
+    // RDP セッション検出結果をキャッシュ（プロセス起動後は変化しない）
+    private static readonly bool _isRdpSession =
+        System.Windows.Forms.SystemInformation.TerminalServerSession;
+    private static readonly bool _wgcSupported = WgcCapture.IsSupported();
+
     /// <summary>指定領域をキャプチャする</summary>
     public Bitmap CaptureScreen(Rectangle bounds)
     {
+        // RDP セッションでは GDI CopyFromScreen がデスクトップ壁紙色しか返さないため
+        // Windows.Graphics.Capture API (DWM コンポジター経由) を使用する。
+        if (_isRdpSession && _wgcSupported)
+        {
+            var wgcBmp = WgcCapture.Capture(bounds);
+            if (wgcBmp != null) return wgcBmp;
+            Serilog.Log.Warning("WGC フォールバック: GDI CopyFromScreen を使用");
+        }
+
         var bmp = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
         g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
