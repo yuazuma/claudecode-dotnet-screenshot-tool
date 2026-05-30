@@ -17,9 +17,11 @@ public class MarkdownManualWriter
         // MD ファイルと同階層に _images/ サブフォルダを作成して画像をコピーする。
         // これにより "../" を使わず "xxx_images/yyy.png" 形式の相対パスにでき、
         // VS Code・GitHub 等の Markdown ビューアで画像が表示される。
-        string mdBase     = Path.GetFileNameWithoutExtension(outputPath);
+        string mdBase        = Path.GetFileNameWithoutExtension(outputPath);
         string imagesDirName = mdBase + "_images";
-        string imagesDir  = Path.Combine(outputDir, imagesDirName);
+        string imagesDir     = Path.Combine(outputDir, imagesDirName);
+        // ソースパス → 相対パスのキャッシュ（同一ファイルの重複コピーを防止）
+        var imageCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
 
@@ -87,8 +89,8 @@ public class MarkdownManualWriter
                 string reviewMark = step.NeedsReview ? " <!-- TODO: UI名を確認してください -->" : "";
                 sb.AppendLine($"{globalStep}. {desc}{reviewMark}");
 
-                string? beforeRel = CopyImage(step.BeforeImagePath, imagesDir, imagesDirName);
-                string? afterRel  = CopyImage(step.AfterImagePath,  imagesDir, imagesDirName);
+                string? beforeRel = CopyImage(step.BeforeImagePath, imagesDir, imagesDirName, imageCache);
+                string? afterRel  = CopyImage(step.AfterImagePath,  imagesDir, imagesDirName, imageCache);
 
                 if (beforeRel != null)
                 {
@@ -119,45 +121,87 @@ public class MarkdownManualWriter
 
     // ── 画像コピー ───────────────────────────────────────────────────────────────
     // 元画像を imagesDir にコピーし、MD から見た相対パス文字列を返す。
+    // 横幅が MaxImageWidth を超える場合はアスペクト比を維持してリサイズする。
     // ファイル名衝突時は連番サフィックスを付与。
     // 元ファイルが存在しない場合は null を返す。
-    private static string? CopyImage(string? srcPath, string imagesDir, string imagesDirName)
+    private const int MaxImageWidth = 1200;
+
+    private static string? CopyImage(string? srcPath, string imagesDir, string imagesDirName,
+        Dictionary<string, string> cache)
     {
         if (string.IsNullOrEmpty(srcPath) || !File.Exists(srcPath))
             return null;
 
+        // 同一ソースは既にコピー済みの相対パスを再利用（重複コピー防止）
+        string srcFull = Path.GetFullPath(srcPath);
+        if (cache.TryGetValue(srcFull, out string? cached))
+            return cached;
+
         Directory.CreateDirectory(imagesDir);
 
-        string ext      = Path.GetExtension(srcPath);       // e.g. ".png"
+        string ext      = Path.GetExtension(srcPath);
         string baseName = Path.GetFileNameWithoutExtension(srcPath);
         string destName = Path.GetFileName(srcPath);
         string destPath = Path.Combine(imagesDir, destName);
 
-        // 同名の別ファイルが既にあれば連番で回避
+        // 別ソースが同名で既に存在する場合は連番サフィックスで回避
         int suffix = 1;
-        while (File.Exists(destPath) && !SameFile(srcPath, destPath))
+        while (File.Exists(destPath))
         {
             destName = $"{baseName}_{suffix++}{ext}";
             destPath = Path.Combine(imagesDir, destName);
         }
 
-        if (!File.Exists(destPath))
-            File.Copy(srcPath, destPath);
+        WriteImage(srcPath, destPath);
 
-        // imagesDir は outputDir の直下なので ".." は不要
-        return $"{imagesDirName}/{destName}";
+        string relPath = $"{imagesDirName}/{destName}";
+        cache[srcFull] = relPath;
+        return relPath;
     }
 
-    private static bool SameFile(string a, string b)
+    // 横幅が MaxImageWidth を超える場合はリサイズして保存、そうでなければそのままコピー。
+    private static void WriteImage(string srcPath, string destPath)
     {
         try
         {
-            var ia = new FileInfo(a);
-            var ib = new FileInfo(b);
-            return ia.Length == ib.Length && ia.LastWriteTimeUtc == ib.LastWriteTimeUtc;
+            using var src = System.Drawing.Image.FromFile(srcPath);
+            if (src.Width <= MaxImageWidth)
+            {
+                // リサイズ不要 — バイト列をそのままコピー
+                File.Copy(srcPath, destPath);
+                return;
+            }
+
+            int newWidth  = MaxImageWidth;
+            int newHeight = (int)Math.Round(src.Height * (double)MaxImageWidth / src.Width);
+            if (newHeight < 1) newHeight = 1;
+
+            using var resized = new System.Drawing.Bitmap(newWidth, newHeight);
+            using var g = System.Drawing.Graphics.FromImage(resized);
+            g.InterpolationMode  = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+            g.SmoothingMode      = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            g.DrawImage(src, 0, 0, newWidth, newHeight);
+
+            // 元の拡張子に合わせたフォーマットで保存
+            var fmt = Path.GetExtension(destPath).ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => System.Drawing.Imaging.ImageFormat.Jpeg,
+                ".webp"           => System.Drawing.Imaging.ImageFormat.Png,  // WebP は GDI+ 非対応のため PNG で代替
+                _                 => System.Drawing.Imaging.ImageFormat.Png,
+            };
+            resized.Save(destPath, fmt);
+
+            Log.Debug("Markdown 用画像リサイズ: {W}px → {NW}px ({Src})",
+                src.Width, newWidth, Path.GetFileName(srcPath));
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Markdown 用画像リサイズに失敗 — そのままコピーします: {Src}", srcPath);
+            File.Copy(srcPath, destPath, overwrite: true);
+        }
     }
+
 
     // O-07: テンプレート適用。{{content}} プレースホルダーがあれば置換、なければ先頭に挿入。
     private static string ApplyMarkdownTemplate(string templatePath, string generated)
