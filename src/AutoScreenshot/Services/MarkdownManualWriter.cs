@@ -14,6 +14,13 @@ public class MarkdownManualWriter
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         string outputDir = Path.GetDirectoryName(outputPath)!;
 
+        // MD ファイルと同階層に _images/ サブフォルダを作成して画像をコピーする。
+        // これにより "../" を使わず "xxx_images/yyy.png" 形式の相対パスにでき、
+        // VS Code・GitHub 等の Markdown ビューアで画像が表示される。
+        string mdBase     = Path.GetFileNameWithoutExtension(outputPath);
+        string imagesDirName = mdBase + "_images";
+        string imagesDir  = Path.Combine(outputDir, imagesDirName);
+
         var sb = new StringBuilder();
 
         // 表紙
@@ -80,24 +87,22 @@ public class MarkdownManualWriter
                 string reviewMark = step.NeedsReview ? " <!-- TODO: UI名を確認してください -->" : "";
                 sb.AppendLine($"{globalStep}. {desc}{reviewMark}");
 
-                bool hasBefore = !string.IsNullOrEmpty(step.BeforeImagePath) && File.Exists(step.BeforeImagePath);
-                bool hasAfter  = !string.IsNullOrEmpty(step.AfterImagePath)  && File.Exists(step.AfterImagePath);
+                string? beforeRel = CopyImage(step.BeforeImagePath, imagesDir, imagesDirName);
+                string? afterRel  = CopyImage(step.AfterImagePath,  imagesDir, imagesDirName);
 
-                if (hasBefore)
+                if (beforeRel != null)
                 {
-                    string rel = Path.GetRelativePath(outputDir, step.BeforeImagePath!).Replace('\\', '/');
                     sb.AppendLine();
                     sb.AppendLine($"   **操作前**");
                     sb.AppendLine();
-                    sb.AppendLine($"   ![操作前 {globalStep}]({rel})");
+                    sb.AppendLine($"   ![操作前 {globalStep}]({beforeRel})");
                 }
-                if (hasAfter)
+                if (afterRel != null)
                 {
-                    string rel = Path.GetRelativePath(outputDir, step.AfterImagePath!).Replace('\\', '/');
                     sb.AppendLine();
-                    if (hasBefore) sb.AppendLine($"   **操作後**");
+                    if (beforeRel != null) sb.AppendLine($"   **操作後**");
                     sb.AppendLine();
-                    sb.AppendLine($"   ![ステップ {globalStep}]({rel})");
+                    sb.AppendLine($"   ![ステップ {globalStep}]({afterRel})");
                 }
                 sb.AppendLine();
             }
@@ -110,6 +115,48 @@ public class MarkdownManualWriter
 
         await File.WriteAllTextAsync(outputPath, finalContent, Encoding.UTF8);
         Log.Information("手順書 Markdown 出力完了: {Path}", outputPath);
+    }
+
+    // ── 画像コピー ───────────────────────────────────────────────────────────────
+    // 元画像を imagesDir にコピーし、MD から見た相対パス文字列を返す。
+    // ファイル名衝突時は連番サフィックスを付与。
+    // 元ファイルが存在しない場合は null を返す。
+    private static string? CopyImage(string? srcPath, string imagesDir, string imagesDirName)
+    {
+        if (string.IsNullOrEmpty(srcPath) || !File.Exists(srcPath))
+            return null;
+
+        Directory.CreateDirectory(imagesDir);
+
+        string ext      = Path.GetExtension(srcPath);       // e.g. ".png"
+        string baseName = Path.GetFileNameWithoutExtension(srcPath);
+        string destName = Path.GetFileName(srcPath);
+        string destPath = Path.Combine(imagesDir, destName);
+
+        // 同名の別ファイルが既にあれば連番で回避
+        int suffix = 1;
+        while (File.Exists(destPath) && !SameFile(srcPath, destPath))
+        {
+            destName = $"{baseName}_{suffix++}{ext}";
+            destPath = Path.Combine(imagesDir, destName);
+        }
+
+        if (!File.Exists(destPath))
+            File.Copy(srcPath, destPath);
+
+        // imagesDir は outputDir の直下なので ".." は不要
+        return $"{imagesDirName}/{destName}";
+    }
+
+    private static bool SameFile(string a, string b)
+    {
+        try
+        {
+            var ia = new FileInfo(a);
+            var ib = new FileInfo(b);
+            return ia.Length == ib.Length && ia.LastWriteTimeUtc == ib.LastWriteTimeUtc;
+        }
+        catch { return false; }
     }
 
     // O-07: テンプレート適用。{{content}} プレースホルダーがあれば置換、なければ先頭に挿入。
